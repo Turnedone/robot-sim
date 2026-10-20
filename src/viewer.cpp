@@ -7,6 +7,7 @@
 
 #include <raylib.h>
 
+#include "lidar.hpp"
 #include "robot.hpp"
 
 namespace {
@@ -31,6 +32,9 @@ const Color kBumpColor{220, 60, 50, 255};
 const Color kWheelColor{25, 25, 30, 255};
 const Color kTrailColor{40, 110, 220, 110};
 const Color kGoalColor{40, 170, 90, 255};
+const Color kRayColor{230, 60, 50, 45};
+const Color kHitColor{230, 50, 40, 255};
+const Color kHiddenMapColor{18, 19, 22, 255};
 const Color kHeaderColor{30, 32, 36, 255};
 const Color kHeaderDim{150, 150, 150, 255};
 
@@ -95,6 +99,20 @@ void drawGoal(Pos goal) {
                   kCellSize - 2 * pad, kGoalColor);
 }
 
+// Draws a scan from the pose it was taken at: a faint ray per beam and a dot
+// where it hit something. Beams with no return are left out.
+void drawScan(const LaserScan& scan, const Pose& from, const Grid& grid, bool showRays) {
+    const Vector2 origin = worldToScreen({from.x, from.y}, grid);
+    for (size_t i = 0; i < scan.ranges.size(); ++i) {
+        const double r = scan.ranges[i];
+        if (!std::isfinite(r)) continue;
+        const double a = from.theta + scan.angle(i);
+        const Vector2 hit = worldToScreen({from.x + r * std::cos(a), from.y + r * std::sin(a)}, grid);
+        if (showRays) DrawLineV(origin, hit, kRayColor);
+        DrawCircleV(hit, 2.5f, kHitColor);
+    }
+}
+
 void drawTrail(const std::vector<Point>& trail, const Grid& grid) {
     for (size_t i = 1; i < trail.size(); ++i)
         DrawLineEx(worldToScreen(trail[i - 1], grid), worldToScreen(trail[i], grid), 2.0f, kTrailColor);
@@ -138,6 +156,14 @@ void runViewer(const Scenario& scenario) {
     double bumpTimer = 0;
     std::optional<double> goalTime;
 
+    Lidar lidar{LidarConfig{}};
+    const double scanPeriod = 1.0 / lidar.config().rateHz;
+    double scanTimer = 0;
+    LaserScan lastScan = lidar.scan(grid, robot.pose());
+    Pose lastScanPose = robot.pose();
+    bool showRays = true;
+    bool showTrueMap = true;
+
     const int mapWidth = grid.width() * kCellSize;
     const int width = std::max(mapWidth, kMinWidth);
     const int height = kHeaderHeight + grid.height() * kCellSize;
@@ -159,6 +185,9 @@ void runViewer(const Scenario& scenario) {
                 grid.set(*hover, Cell::Free);
         }
 
+        if (IsKeyPressed(KEY_L)) showRays = !showRays;
+        if (IsKeyPressed(KEY_M)) showTrueMap = !showTrueMap;
+
         if (IsKeyPressed(KEY_R)) {
             grid = scenario.grid;
             robot = DiffDriveRobot(config, startPose(scenario));
@@ -166,6 +195,9 @@ void runViewer(const Scenario& scenario) {
             simTime = 0;
             accumulator = 0;
             goalTime.reset();
+            scanTimer = 0;
+            lastScan = lidar.scan(grid, robot.pose());
+            lastScanPose = robot.pose();
         }
 
         // --- simulate ----------------------------------------------------
@@ -183,6 +215,14 @@ void runViewer(const Scenario& scenario) {
                 if (trail.size() > kTrailMax) trail.erase(trail.begin());
             }
             if (!goalTime && grid.worldToCell(here) == scenario.goal) goalTime = simTime;
+
+            // The lidar spins at its own rate (5 Hz), slower than the physics.
+            scanTimer += kPhysicsDt;
+            if (scanTimer >= scanPeriod) {
+                scanTimer -= scanPeriod;
+                lastScan = lidar.scan(grid, robot.pose());
+                lastScanPose = robot.pose();
+            }
         }
         bumpTimer = std::max(0.0, bumpTimer - GetFrameTime());
 
@@ -195,7 +235,7 @@ void runViewer(const Scenario& scenario) {
                                 robot.distanceTravelled()),
                      12, 8, 18, kGoalColor);
         } else {
-            DrawText("arrows: drive   click: wall   R: reset", 12, 8, 18, kHeaderDim);
+            DrawText("arrows: drive  click: wall  L: rays  M: map  R: reset", 12, 8, 18, kHeaderDim);
         }
         if (hover) {
             const char* label = TextFormat("cell (%d, %d)", hover->x, hover->y);
@@ -210,9 +250,14 @@ void runViewer(const Scenario& scenario) {
                             robot.rightSpeed(), robot.distanceTravelled()),
                  12, 32, 16, RAYWHITE);
 
-        drawGrid(grid);
+        // M hides the real map: then you see only what the robot's lidar sees.
+        if (showTrueMap)
+            drawGrid(grid);
+        else
+            DrawRectangle(0, kHeaderHeight, width, height - kHeaderHeight, kHiddenMapColor);
         drawGoal(scenario.goal);
         drawTrail(trail, grid);
+        drawScan(lastScan, lastScanPose, grid, showRays);
         drawRobot(robot, grid, bumpTimer > 0);
         if (hover) drawHover(*hover);
         EndDrawing();

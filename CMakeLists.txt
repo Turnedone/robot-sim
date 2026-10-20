@@ -23,6 +23,7 @@ FetchContent_MakeAvailable(raylib)
 add_library(robot_core
     src/grid.cpp
     src/robot.cpp
+    src/lidar.cpp
 )
 target_include_directories(robot_core PUBLIC src)
 target_compile_options(robot_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -41,3 +42,8 @@ add_executable(test_robot tests/test_robot.cpp)
 target_link_libraries(test_robot PRIVATE robot_core)
 target_compile_options(test_robot PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME robot_motion COMMAND test_robot)
+
+add_executable(test_lidar tests/test_lidar.cpp)
+target_link_libraries(test_lidar PRIVATE robot_core)
+target_compile_options(test_lidar PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME lidar COMMAND test_lidar)
