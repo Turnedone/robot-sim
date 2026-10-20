@@ -24,6 +24,7 @@ add_library(robot_core
     src/grid.cpp
     src/robot.cpp
     src/lidar.cpp
+    src/occupancy_map.cpp
 )
 target_include_directories(robot_core PUBLIC src)
 target_compile_options(robot_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -47,3 +48,8 @@ add_executable(test_lidar tests/test_lidar.cpp)
 target_link_libraries(test_lidar PRIVATE robot_core)
 target_compile_options(test_lidar PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME lidar COMMAND test_lidar)
+
+add_executable(test_mapping tests/test_mapping.cpp)
+target_link_libraries(test_mapping PRIVATE robot_core)
+target_compile_options(test_mapping PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME mapping COMMAND test_mapping)

@@ -28,9 +28,9 @@ struct LidarConfig {
     double rateHz = 5.0;         // scans per second
 };
 
-// Distance from `origin` along `angle` (map frame) to the first wall, using a
-// DDA grid walk: it visits exactly the cells the ray passes through, in order.
-// Returns infinity if no wall is found within maxRange.
+// Distance from `origin` along `angle` (map frame) to the first wall, using
+// the DDA grid walk in raycast.hpp. Returns infinity if no wall is found
+// within maxRange.
 double castRay(const Grid& grid, Point origin, double angle, double maxRange);
 
 // A simulated lidar: perfect ray casting plus realistic imperfections.

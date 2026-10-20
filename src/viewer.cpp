@@ -8,12 +8,13 @@
 #include <raylib.h>
 
 #include "lidar.hpp"
+#include "occupancy_map.hpp"
 #include "robot.hpp"
 
 namespace {
 
 constexpr int kCellSize = 32;      // pixels per map cell
-constexpr int kHeaderHeight = 56;  // strip at the top for text (two lines)
+constexpr int kHeaderHeight = 80;  // strip at the top for text (three lines)
 constexpr int kMinWidth = 760;     // so the header text always fits
 
 constexpr double kPhysicsDt = 0.02;     // simulate at 50 Hz, a typical robot control rate
@@ -35,6 +36,9 @@ const Color kGoalColor{40, 170, 90, 255};
 const Color kRayColor{230, 60, 50, 45};
 const Color kHitColor{230, 50, 40, 255};
 const Color kHiddenMapColor{18, 19, 22, 255};
+const Color kUnknownColor{112, 120, 132, 255};  // as in RViz: unknown grey, free white, wall black
+const Color kOccupiedColor{22, 24, 28, 255};
+const Color kWrongColor{230, 40, 40, 255};
 const Color kHeaderColor{30, 32, 36, 255};
 const Color kHeaderDim{150, 150, 150, 255};
 
@@ -97,6 +101,46 @@ void drawGoal(Pos goal) {
     const int pad = kCellSize / 5;
     DrawRectangle(static_cast<int>(s.x) + pad, static_cast<int>(s.y) + pad, kCellSize - 2 * pad,
                   kCellSize - 2 * pad, kGoalColor);
+}
+
+// What the screen shows under the robot (M cycles through them).
+enum class View { RobotMap, TrueMap, LidarOnly };
+
+const char* viewName(View v) {
+    switch (v) {
+        case View::RobotMap: return "ROBOT'S MAP (built from lidar)";
+        case View::TrueMap: return "TRUE MAP (what is really there)";
+        case View::LidarOnly: return "LIDAR ONLY (no memory)";
+    }
+    return "";
+}
+
+Color mix(Color a, Color b, float t) {
+    const auto ch = [t](unsigned char x, unsigned char y) {
+        return static_cast<unsigned char>(x + (y - x) * t);
+    };
+    return {ch(a.r, b.r), ch(a.g, b.g), ch(a.b, b.b), 255};
+}
+
+// The robot's belief: never-seen cells grey, the rest shaded from light
+// (sure it is free) to dark (sure it is a wall). Cells the robot is sure about
+// but has WRONG are outlined in red.
+void drawOccupancy(const OccupancyMap& map, const Grid& truth) {
+    for (int y = 0; y < map.height(); ++y) {
+        for (int x = 0; x < map.width(); ++x) {
+            const Vector2 s = cellToScreen({x, y});
+            const Color c = map.observed({x, y})
+                                ? mix(kFreeColor, kOccupiedColor, static_cast<float>(map.probability({x, y})))
+                                : kUnknownColor;
+            DrawRectangle(static_cast<int>(s.x), static_cast<int>(s.y), kCellSize, kCellSize, c);
+            DrawRectangleLines(static_cast<int>(s.x), static_cast<int>(s.y), kCellSize, kCellSize,
+                               mix(c, kGridLineColor, 0.25f));
+            const Occupancy o = map.classify({x, y});
+            const bool isWall = truth.at({x, y}) == Cell::Wall;
+            if (o != Occupancy::Unknown && (o == Occupancy::Occupied) != isWall)
+                DrawRectangleLinesEx({s.x + 2, s.y + 2, kCellSize - 4, kCellSize - 4}, 2.0f, kWrongColor);
+        }
+    }
 }
 
 // Draws a scan from the pose it was taken at: a faint ray per beam and a dot
@@ -162,7 +206,10 @@ void runViewer(const Scenario& scenario) {
     LaserScan lastScan = lidar.scan(grid, robot.pose());
     Pose lastScanPose = robot.pose();
     bool showRays = true;
-    bool showTrueMap = true;
+    View view = View::RobotMap;
+
+    OccupancyMap map(grid.width(), grid.height(), grid.resolution());
+    map.integrate(lastScan, lastScanPose);
 
     const int mapWidth = grid.width() * kCellSize;
     const int width = std::max(mapWidth, kMinWidth);
@@ -186,7 +233,7 @@ void runViewer(const Scenario& scenario) {
         }
 
         if (IsKeyPressed(KEY_L)) showRays = !showRays;
-        if (IsKeyPressed(KEY_M)) showTrueMap = !showTrueMap;
+        if (IsKeyPressed(KEY_M)) view = static_cast<View>((static_cast<int>(view) + 1) % 3);
 
         if (IsKeyPressed(KEY_R)) {
             grid = scenario.grid;
@@ -198,6 +245,8 @@ void runViewer(const Scenario& scenario) {
             scanTimer = 0;
             lastScan = lidar.scan(grid, robot.pose());
             lastScanPose = robot.pose();
+            map = OccupancyMap(grid.width(), grid.height(), grid.resolution());
+            map.integrate(lastScan, lastScanPose);
         }
 
         // --- simulate ----------------------------------------------------
@@ -222,6 +271,7 @@ void runViewer(const Scenario& scenario) {
                 scanTimer -= scanPeriod;
                 lastScan = lidar.scan(grid, robot.pose());
                 lastScanPose = robot.pose();
+                map.integrate(lastScan, lastScanPose);  // the robot learns from every scan
             }
         }
         bumpTimer = std::max(0.0, bumpTimer - GetFrameTime());
@@ -235,7 +285,7 @@ void runViewer(const Scenario& scenario) {
                                 robot.distanceTravelled()),
                      12, 8, 18, kGoalColor);
         } else {
-            DrawText("arrows: drive  click: wall  L: rays  M: map  R: reset", 12, 8, 18, kHeaderDim);
+            DrawText("arrows: drive  click: wall  M: view  L: rays  R: reset", 12, 8, 18, kHeaderDim);
         }
         if (hover) {
             const char* label = TextFormat("cell (%d, %d)", hover->x, hover->y);
@@ -250,11 +300,29 @@ void runViewer(const Scenario& scenario) {
                             robot.rightSpeed(), robot.distanceTravelled()),
                  12, 32, 16, RAYWHITE);
 
-        // M hides the real map: then you see only what the robot's lidar sees.
-        if (showTrueMap)
-            drawGrid(grid);
-        else
-            DrawRectangle(0, kHeaderHeight, width, height - kHeaderHeight, kHiddenMapColor);
+        // How good is the robot's map? Explored = cells it is sure about;
+        // wrong = cells it is sure about but has the opposite of reality.
+        int explored = 0;
+        int wrong = 0;
+        for (int y = 0; y < grid.height(); ++y) {
+            for (int x = 0; x < grid.width(); ++x) {
+                const Occupancy o = map.classify({x, y});
+                if (o == Occupancy::Unknown) continue;
+                ++explored;
+                if ((o == Occupancy::Occupied) != (grid.at({x, y}) == Cell::Wall)) ++wrong;
+            }
+        }
+        DrawText(TextFormat("view: %s   explored %d%%   wrong cells %d", viewName(view),
+                            100 * explored / (grid.width() * grid.height()), wrong),
+                 12, 56, 16, wrong > 0 ? kWrongColor : kHoverColor);
+
+        switch (view) {
+            case View::RobotMap: drawOccupancy(map, grid); break;
+            case View::TrueMap: drawGrid(grid); break;
+            case View::LidarOnly:
+                DrawRectangle(0, kHeaderHeight, width, height - kHeaderHeight, kHiddenMapColor);
+                break;
+        }
         drawGoal(scenario.goal);
         drawTrail(trail, grid);
         drawScan(lastScan, lastScanPose, grid, showRays);
