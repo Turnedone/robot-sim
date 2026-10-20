@@ -23,7 +23,7 @@ jobs:
           - { name: "Linux / Clang",   os: ubuntu-24.04, compiler: clang, werror: "ON" }
           - { name: "Windows / MSVC",  os: windows-2022, compiler: msvc,  werror: "OFF" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install the viewer's system libraries
         if: runner.os == 'Linux'
@@ -54,7 +54,7 @@ jobs:
     name: Sanitizers (ASan + UBSan)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Configure
         run: >
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -72,8 +72,8 @@ jobs:
     name: Formatting and clang-tidy
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install the pinned clang-format and clang-tidy
