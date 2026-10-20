@@ -26,7 +26,7 @@ through unknown space and is re-planned five times a second as the lidar reveals
 | ROS 2 + Gazebo | The same core as ROS 2 nodes; **our localizer and navigator drive a TurtleBot3 in Gazebo** in place of AMCL and Nav2 (under 5 cm localization error) | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose`; inflation and path smoothing for 5 cm maps; WSL2 setup | [06-ros2](docs/06-ros2.md) |
 
 How it was debugged — the problems the tests found and how each was tracked down — is in the
-[engineering log](docs/engineering-log.md). Questions to check your understanding are in the
+[engineering log](docs/engineering-log.md). The [devlog](docs/devlog.md) tells the whole story stage by stage. Questions to check your understanding are in the
 [self-test](docs/self-test.md).
 
 ## Design
