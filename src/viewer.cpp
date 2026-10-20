@@ -23,7 +23,7 @@ constexpr double kTeleopLinear = 0.5;   // m/s while up/down is held
 constexpr double kTeleopAngular = 2.0;  // rad/s while left/right is held
 constexpr double kTrailSpacing = 0.05;  // m between trail points
 constexpr size_t kTrailMax = 4000;
-constexpr double kBumpFlash = 0.3;      // s the robot shows red after a bump
+constexpr double kBumpFlash = 0.3;  // s the robot shows red after a bump
 
 const Color kFreeColor{235, 235, 230, 255};
 const Color kWallColor{60, 63, 70, 255};
@@ -45,7 +45,9 @@ const Color kTargetColor{240, 150, 30, 255};
 const Color kHeaderColor{30, 32, 36, 255};
 const Color kHeaderDim{150, 150, 150, 255};
 
-float pixelsPerMeter(const Grid& grid) { return static_cast<float>(kCellSize / grid.resolution()); }
+float pixelsPerMeter(const Grid& grid) {
+    return static_cast<float>(kCellSize / grid.resolution());
+}
 
 // Top-left pixel of a map cell on screen.
 Vector2 cellToScreen(Pos p) {
@@ -62,8 +64,7 @@ Vector2 worldToScreen(Point w, const Grid& grid) {
 // Which cell a pixel is in, or nothing if it is outside the map.
 std::optional<Pos> screenToCell(Vector2 pixel, const Grid& grid) {
     if (pixel.y < kHeaderHeight) return std::nullopt;
-    const Pos p{static_cast<int>(pixel.x) / kCellSize,
-                (static_cast<int>(pixel.y) - kHeaderHeight) / kCellSize};
+    const Pos p{static_cast<int>(pixel.x) / kCellSize, (static_cast<int>(pixel.y) - kHeaderHeight) / kCellSize};
     if (!grid.inBounds(p)) return std::nullopt;
     return p;
 }
@@ -99,7 +100,7 @@ Twist readTeleop() {
     Twist cmd;
     if (IsKeyDown(KEY_UP)) cmd.linear += kTeleopLinear;
     if (IsKeyDown(KEY_DOWN)) cmd.linear -= kTeleopLinear;
-    if (IsKeyDown(KEY_LEFT)) cmd.angular += kTeleopAngular;   // counter-clockwise
+    if (IsKeyDown(KEY_LEFT)) cmd.angular += kTeleopAngular;  // counter-clockwise
     if (IsKeyDown(KEY_RIGHT)) cmd.angular -= kTeleopAngular;
     return cmd;
 }
@@ -128,12 +129,12 @@ void drawHover(Pos cell) {
 void drawGoal(Pos goal) {
     const Vector2 s = cellToScreen(goal);
     const int pad = kCellSize / 5;
-    DrawRectangle(static_cast<int>(s.x) + pad, static_cast<int>(s.y) + pad, kCellSize - 2 * pad,
-                  kCellSize - 2 * pad, kGoalColor);
+    DrawRectangle(static_cast<int>(s.x) + pad, static_cast<int>(s.y) + pad, kCellSize - 2 * pad, kCellSize - 2 * pad,
+                  kGoalColor);
 }
 
 // What the screen shows under the robot (M cycles through them).
-enum class View { RobotMap, TrueMap, LidarOnly };
+enum class View : std::uint8_t { RobotMap, TrueMap, LidarOnly };
 
 const char* viewName(View v) {
     switch (v) {
@@ -145,9 +146,7 @@ const char* viewName(View v) {
 }
 
 Color mix(Color a, Color b, float t) {
-    const auto ch = [t](unsigned char x, unsigned char y) {
-        return static_cast<unsigned char>(x + (y - x) * t);
-    };
+    const auto ch = [t](unsigned char x, unsigned char y) { return static_cast<unsigned char>(x + (y - x) * t); };
     return {ch(a.r, b.r), ch(a.g, b.g), ch(a.b, b.b), 255};
 }
 
@@ -239,7 +238,9 @@ void runViewer(const Scenario& scenario, bool goToGoal) {
 
     OccupancyMap map(grid.width(), grid.height(), grid.resolution());
     map.integrate(lastScan, lastScanPose);
-    Navigator nav;
+    NavigatorConfig navConfig;
+    navConfig.robotRadius = config.radius;
+    Navigator nav(navConfig);
     if (goToGoal) {
         nav.setGoal(scenario.goal);
         nav.replan(map, robot.pose());
@@ -271,8 +272,7 @@ void runViewer(const Scenario& scenario, bool goToGoal) {
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && *hover != scenario.goal) {
             grid.set(*hover, grid.at(*hover) == Cell::Wall ? Cell::Free : Cell::Wall);
             // Never drop a wall on top of the robot.
-            if (collides(grid, {robot.pose().x, robot.pose().y}, config.radius))
-                grid.set(*hover, Cell::Free);
+            if (collides(grid, {robot.pose().x, robot.pose().y}, config.radius)) grid.set(*hover, Cell::Free);
         }
 
         if (IsKeyPressed(KEY_L)) showRays = !showRays;
@@ -290,7 +290,7 @@ void runViewer(const Scenario& scenario, bool goToGoal) {
             lastScanPose = robot.pose();
             map = OccupancyMap(grid.width(), grid.height(), grid.resolution());
             map.integrate(lastScan, lastScanPose);
-            nav = Navigator();
+            nav = Navigator(navConfig);
         }
 
         // --- simulate ----------------------------------------------------
@@ -328,11 +328,12 @@ void runViewer(const Scenario& scenario, bool goToGoal) {
         ClearBackground(kHeaderColor);
 
         if (goalTime) {
-            DrawText(TextFormat("Goal reached in %.1f s, %.1f m driven.   R to reset", *goalTime,
-                                robot.distanceTravelled()),
-                     12, 8, 18, kGoalColor);
+            DrawText(
+                TextFormat("Goal reached in %.1f s, %.1f m driven.   R to reset", *goalTime, robot.distanceTravelled()),
+                12, 8, 18, kGoalColor);
         } else {
-            DrawText("click: go  G: goal  arrows: drive  right-click: wall  M: view  L: rays  R: reset", 12, 8, 16, kHeaderDim);
+            DrawText("click: go  G: goal  arrows: drive  right-click: wall  M: view  L: rays  R: reset", 12, 8, 16,
+                     kHeaderDim);
         }
         if (hover) {
             const char* label = TextFormat("cell (%d, %d)", hover->x, hover->y);
@@ -343,8 +344,8 @@ void runViewer(const Scenario& scenario, bool goToGoal) {
         const Twist v = robot.velocity();
         DrawText(TextFormat("x %5.2f  y %5.2f m  heading %4.0f deg   v %5.2f m/s  w %5.2f rad/s   "
                             "wheels L %5.2f  R %5.2f m/s   %.1f m",
-                            p.x, p.y, p.theta * RAD2DEG, v.linear, v.angular, robot.leftSpeed(),
-                            robot.rightSpeed(), robot.distanceTravelled()),
+                            p.x, p.y, p.theta * RAD2DEG, v.linear, v.angular, robot.leftSpeed(), robot.rightSpeed(),
+                            robot.distanceTravelled()),
                  12, 32, 16, RAYWHITE);
 
         // How good is the robot's map? Explored = cells it is sure about;

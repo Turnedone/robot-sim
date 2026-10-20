@@ -5,10 +5,7 @@
 #include <stdexcept>
 
 Grid::Grid(int width, int height, double resolution)
-    : width_(width),
-      height_(height),
-      resolution_(resolution),
-      cells_(static_cast<size_t>(width * height), Cell::Free) {}
+    : width_(width), height_(height), resolution_(resolution), cells_(cellCount(width, height), Cell::Free) {}
 
 Point cellCenter(Pos p, int mapHeight, double resolution) {
     // Row 0 is the TOP of the map, but y grows UP, hence the flip.
@@ -28,12 +25,12 @@ bool Grid::inBounds(Pos p) const {
 Cell Grid::at(Pos p) const {
     // Outside the map counts as wall, so the robot can never drive off the edge.
     if (!inBounds(p)) return Cell::Wall;
-    return cells_[static_cast<size_t>(p.y * width_ + p.x)];
+    return cells_[cellIndex(p, width_)];
 }
 
 void Grid::set(Pos p, Cell c) {
     if (!inBounds(p)) throw std::out_of_range("Grid::set outside the map");
-    cells_[static_cast<size_t>(p.y * width_ + p.x)] = c;
+    cells_[cellIndex(p, width_)] = c;
 }
 
 Scenario loadScenario(const std::string& path) {
@@ -62,8 +59,7 @@ Scenario loadScenario(const std::string& path) {
                 case '.': break;
                 case 'S': start = {x, y}; break;
                 case 'G': goal = {x, y}; break;
-                default:
-                    throw std::runtime_error(std::string("unknown map character '") + lines[y][x] + "'");
+                default: throw std::runtime_error(std::string("unknown map character '") + lines[y][x] + "'");
             }
         }
     }

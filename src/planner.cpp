@@ -42,8 +42,8 @@ std::optional<std::vector<Pos>> planPath(const OccupancyMap& map, Pos start, Pos
     };
 
     const int w = map.width();
-    const size_t n = static_cast<size_t>(w * map.height());
-    const auto idx = [w](Pos p) { return static_cast<size_t>(p.y * w + p.x); };
+    const size_t n = cellCount(w, map.height());
+    const auto idx = [w](Pos p) { return cellIndex(p, w); };
     constexpr double kInf = std::numeric_limits<double>::infinity();
 
     std::vector<double> costSoFar(n, kInf);  // "g" in A* textbooks

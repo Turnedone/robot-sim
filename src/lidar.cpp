@@ -1,4 +1,4 @@
-﻿#include "lidar.hpp"
+#include "lidar.hpp"
 
 #include <cmath>
 #include <limits>
@@ -7,7 +7,6 @@
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
 constexpr double kInf = std::numeric_limits<double>::infinity();
 
 }  // namespace

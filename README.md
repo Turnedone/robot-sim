@@ -1,5 +1,8 @@
 # robot-sim
 
+[![CI](https://github.com/Turnedone/robot-sim/actions/workflows/ci.yml/badge.svg)](https://github.com/Turnedone/robot-sim/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A 2D mobile-robot simulator in modern C++ (C++17) that implements a small but complete
 **autonomy stack** from scratch: a differential-drive robot with a noisy lidar builds its
 own map, plans a path on it, and drives there â€” starting from knowing nothing.
@@ -57,7 +60,7 @@ cmake --build build
 ./build/robot_sim --text               # print the map in the terminal instead
 ```
 
-On Windows with MinGW add `-G "MinGW Makefiles"` to the first command.
+On Windows with MinGW add `-G "MinGW Makefiles"` (or `-G Ninja`) to the first command; with Visual Studio no extra options are needed.
 
 ### Controls
 
@@ -76,16 +79,40 @@ and how many cells it has **wrong** (sure about, but the opposite of reality) â€
 
 ## Tests
 
+51 [GoogleTest](https://github.com/google/googletest) tests, about 1 second in a release build:
+
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-| Suite | Checks |
+| File | Checks |
 |---|---|
-| `test_robot` | Motion against hand-worked answers: straight lines, spins, exact arcs, speed caps keep curvature, acceleration, bumper, angle wrapping, map frame |
-| `test_lidar` | Ray distances (straight, diagonal, off-centre), range limits, noise statistics, repeatability with a fixed seed |
-| `test_mapping` | Log-odds maths, one scan is not enough, hidden cells stay unknown, out-of-range walls stay unknown, removed obstacles fade, a noisy lidar maps a room with zero wrong cells |
-| `test_navigation` | A\* (gaps, walled-in goals, no corner cutting, preferring known space) and the **whole robot closing the loop**: on both maps, 10 runs each with different sensor noise, it must reach the goal every time without touching a wall |
+| [`test_robot`](tests/test_robot.cpp) | Motion against hand-worked answers: straight lines, spins, exact arcs, speed caps keep curvature, acceleration, bumper, angle wrapping, map frame |
+| [`test_lidar`](tests/test_lidar.cpp) | Ray distances (straight, diagonal, off-centre), range limits, noise statistics, repeatability with a fixed seed |
+| [`test_mapping`](tests/test_mapping.cpp) | Log-odds maths, one scan is not enough, hidden and out-of-range cells stay unknown, removed obstacles fade, a noisy lidar maps a room with zero wrong cells |
+| [`test_planner`](tests/test_planner.cpp) | A\*: gaps, walled-in goals, no corner cutting, preferring known space |
+| [`test_navigation`](tests/test_navigation.cpp) | The **whole robot closing the loop**: on both maps, 10 runs each with different sensor noise, it must reach the goal every time without touching a wall |
+
+## Development
+
+| CMake option | Default | |
+|---|---|---|
+| `ROBOT_SIM_BUILD_VIEWER` | ON | the raylib viewer; turn off to build only the logic and tests (no display libraries needed) |
+| `ROBOT_SIM_BUILD_TESTS` | ON | GoogleTest is downloaded automatically |
+| `ROBOT_SIM_WERROR` | OFF | treat warnings as errors (CI turns it on for GCC and Clang) |
+| `ROBOT_SIM_SANITIZE` | OFF | AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang) |
+
+Code is formatted with clang-format and checked with clang-tidy; both are pinned to 23.1.3 so local
+results match CI (`pip install clang-format==23.1.3 clang-tidy==23.1.3`):
+
+```bash
+clang-format -i src/*.cpp src/*.hpp tests/*.cpp
+clang-tidy -p build src/*.cpp tests/*.cpp
+```
+
+**Continuous integration** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
+build and test on Linux (GCC and Clang, warnings as errors) and Windows (MSVC), the tests again under
+AddressSanitizer + UBSan, a formatting check, and clang-tidy.
 
 ## Maps
 
@@ -97,3 +124,7 @@ See [maps/](maps).
 - **Localization.** The robot currently knows its true pose. Next: wheel slip, odometry drift and a particle filter.
 - **Path smoothing.** A\* paths on a grid have many small corners; the controller stops and turns at each one, which is safe in narrow corridors but slow in open space. Line-of-sight smoothing would fix this.
 - **ROS 2.** Wrap the core as ROS 2 nodes and run it against Gazebo / Nav2.
+
+## License
+
+[MIT](LICENSE).

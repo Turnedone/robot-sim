@@ -1,21 +1,23 @@
-﻿#include "occupancy_map.hpp"
+#include "occupancy_map.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 #include "raycast.hpp"
 
-double logOddsToProbability(double l) { return 1.0 - 1.0 / (1.0 + std::exp(l)); }
+double logOddsToProbability(double l) {
+    return 1.0 - 1.0 / (1.0 + std::exp(l));
+}
 
 OccupancyMap::OccupancyMap(int width, int height, double resolution, const OccupancyConfig& config)
     : width_(width),
       height_(height),
       resolution_(resolution),
       config_(config),
-      logOdds_(static_cast<size_t>(width * height), 0.0),
-      observed_(static_cast<size_t>(width * height), false),
-      scanHits_(static_cast<size_t>(width * height), 0),
-      scanMisses_(static_cast<size_t>(width * height), 0) {}
+      logOdds_(cellCount(width, height), 0.0),
+      observed_(cellCount(width, height), false),
+      scanHits_(cellCount(width, height), 0),
+      scanMisses_(cellCount(width, height), 0) {}
 
 void OccupancyMap::update(Pos p, double delta) {
     const size_t i = index(p);
@@ -99,11 +101,17 @@ void OccupancyMap::set(Pos p, Occupancy o) {
     observed_[i] = o != Occupancy::Unknown;
 }
 
-bool OccupancyMap::observed(Pos p) const { return inBounds(p) && observed_[index(p)]; }
+bool OccupancyMap::observed(Pos p) const {
+    return inBounds(p) && observed_[index(p)];
+}
 
-double OccupancyMap::logOdds(Pos p) const { return inBounds(p) ? logOdds_[index(p)] : 0.0; }
+double OccupancyMap::logOdds(Pos p) const {
+    return inBounds(p) ? logOdds_[index(p)] : 0.0;
+}
 
-double OccupancyMap::probability(Pos p) const { return logOddsToProbability(logOdds(p)); }
+double OccupancyMap::probability(Pos p) const {
+    return logOddsToProbability(logOdds(p));
+}
 
 Occupancy OccupancyMap::classify(Pos p) const {
     if (!observed(p)) return Occupancy::Unknown;

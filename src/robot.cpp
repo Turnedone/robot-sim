@@ -5,8 +5,6 @@
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
-
 // Moves `current` towards `target` by at most `maxChange`.
 double approach(double current, double target, double maxChange) {
     if (target > current) return std::min(target, current + maxChange);
@@ -21,30 +19,13 @@ double normalizeAngle(double a) {
     return a - kPi;
 }
 
-bool collides(const Grid& grid, Point c, double r) {
-    const double res = grid.resolution();
-    // Only the cells under the circle's bounding box can touch it.
-    const Pos topLeft = grid.worldToCell({c.x - r, c.y + r});
-    const Pos bottomRight = grid.worldToCell({c.x + r, c.y - r});
-
-    for (int row = topLeft.y; row <= bottomRight.y; ++row) {
-        for (int col = topLeft.x; col <= bottomRight.x; ++col) {
-            if (grid.at({col, row}) != Cell::Wall) continue;
-            // The cell's square in meters, then the point of it closest to the centre.
-            const double minX = col * res;
-            const double minY = (grid.height() - 1 - row) * res;
-            const double nearestX = std::clamp(c.x, minX, minX + res);
-            const double nearestY = std::clamp(c.y, minY, minY + res);
-            const double dx = c.x - nearestX;
-            const double dy = c.y - nearestY;
-            if (dx * dx + dy * dy < r * r) return true;
-        }
-    }
-    return false;
+bool collides(const Grid& grid, Point centre, double radius) {
+    // Outside the map counts as wall (Grid::at returns Wall there).
+    return circleOverlapsWall(centre, radius, grid.height(), grid.resolution(),
+                              [&grid](Pos cell) { return grid.at(cell) == Cell::Wall; });
 }
 
-DiffDriveRobot::DiffDriveRobot(const DiffDriveConfig& config, Pose start)
-    : config_(config), pose_(start) {}
+DiffDriveRobot::DiffDriveRobot(const DiffDriveConfig& config, Pose start) : config_(config), pose_(start) {}
 
 void DiffDriveRobot::setCommand(Twist cmd) {
     // Inverse kinematics: the wheel speeds that give this v and omega.

@@ -6,14 +6,14 @@
 #include "robot.hpp"
 
 struct PursuitConfig {
-    double lookahead = 0.35;         // m: how far ahead on the path to aim
-    double maxSpeed = 0.4;           // m/s
-    double curvatureSlowdown = 0.6;  // slow down on tight curves: v = max / (1 + k * |curvature|)
-    double goalSlowdown = 1.0;       // near the goal or a corner: v <= k * distance to it
-    double minSpeed = 0.05;          // m/s, so it never stalls just short of the goal
-    double rotateInPlaceAbove = 1.0; // rad (~57 deg): target this far off the nose -> turn on the spot first
-    double rotateSpeed = 1.5;        // rad/s when turning on the spot
-    double goalTolerance = 0.12;     // m: close enough counts as arrived
+    double lookahead = 0.35;          // m: how far ahead on the path to aim
+    double maxSpeed = 0.4;            // m/s
+    double curvatureSlowdown = 0.6;   // slow down on tight curves: v = max / (1 + k * |curvature|)
+    double goalSlowdown = 1.0;        // near the goal or a corner: v <= k * distance to it
+    double minSpeed = 0.05;           // m/s, so it never stalls just short of the goal
+    double rotateInPlaceAbove = 1.0;  // rad (~57 deg): target this far off the nose -> turn on the spot first
+    double rotateSpeed = 1.5;         // rad/s when turning on the spot
+    double goalTolerance = 0.12;      // m: close enough counts as arrived
 };
 
 // Pure pursuit: aim at a point a fixed distance ahead on the path and drive

@@ -40,9 +40,8 @@ int main(int argc, char** argv) {
 
     try {
         const Scenario s = loadScenario(mapPath);
-        std::cout << "Map " << mapPath << ": " << s.grid.width() << "x" << s.grid.height()
-                  << ", robot at (" << s.start.x << "," << s.start.y << "), goal at ("
-                  << s.goal.x << "," << s.goal.y << ")\n";
+        std::cout << "Map " << mapPath << ": " << s.grid.width() << "x" << s.grid.height() << ", robot at ("
+                  << s.start.x << "," << s.start.y << "), goal at (" << s.goal.x << "," << s.goal.y << ")\n";
         if (textMode) {
             std::cout << '\n';
             printMap(s.grid, s.start, s.goal);

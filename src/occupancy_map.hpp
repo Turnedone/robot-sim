@@ -10,15 +10,15 @@
 // log-odds l = log(p / (1 - p)): 0 = 50% (unknown), positive = probably a wall.
 // Updating a belief with a new reading (Bayes' rule) then becomes plain addition.
 struct OccupancyConfig {
-    double hit = 0.85;          // a beam ended here:      p = 0.70
-    double miss = -0.41;        // a beam passed through:  p = 0.40
-    double minLogOdds = -2.0;   // caps (p = 0.12 .. 0.97), so a belief never gets so
-    double maxLogOdds = 3.5;    //   strong that new evidence cannot change it
+    double hit = 0.85;         // a beam ended here:      p = 0.70
+    double miss = -0.41;       // a beam passed through:  p = 0.40
+    double minLogOdds = -2.0;  // caps (p = 0.12 .. 0.97), so a belief never gets so
+    double maxLogOdds = 3.5;   //   strong that new evidence cannot change it
     // Classifying needs at least TWO agreeing votes either way: one hit (0.85)
     // or one miss (-0.41) leaves a cell "unknown". A real wall collects dozens
     // of hits within a second; a one-off glitch must not become a wall.
-    double occupiedAbove = 1.2;   // p > 0.77 -> occupied
-    double freeBelow = -0.62;     // p < 0.35 -> free
+    double occupiedAbove = 1.2;  // p > 0.77 -> occupied
+    double freeBelow = -0.62;    // p < 0.35 -> free
     // A reading says "the surface is within this distance of here". Without
     // it, noise would drop half the hits into the free cell just in front of
     // a wall, and walls would grow a cell thicker.
@@ -30,7 +30,7 @@ struct OccupancyConfig {
     double usableRange = 2.5;  // m, the lidar itself reaches 3.5 m
 };
 
-enum class Occupancy { Unknown, Free, Occupied };
+enum class Occupancy : std::uint8_t { Unknown, Free, Occupied };
 
 double logOddsToProbability(double l);
 
@@ -54,14 +54,14 @@ public:
     Point cellCenter(Pos p) const { return ::cellCenter(p, height_, resolution_); }
     Pos worldToCell(Point w) const { return ::worldToCell(w, height_, resolution_); }
 
-    bool observed(Pos p) const;       // has any beam ever touched this cell?
+    bool observed(Pos p) const;  // has any beam ever touched this cell?
     double logOdds(Pos p) const;
     double probability(Pos p) const;
     Occupancy classify(Pos p) const;
 
 private:
     void update(Pos p, double delta);
-    size_t index(Pos p) const { return static_cast<size_t>(p.y * width_ + p.x); }
+    size_t index(Pos p) const { return cellIndex(p, width_); }
 
     int width_;
     int height_;

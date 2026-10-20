@@ -1,5 +1,6 @@
 #pragma once
 
+#include "geometry.hpp"
 #include "grid.hpp"
 
 // Where the robot is: position in meters (map frame) and heading in radians.
@@ -25,9 +26,6 @@ struct DiffDriveConfig {
     double maxWheelAccel = 1.2;  // motors cannot change speed instantly, m/s^2
 };
 
-// Wraps any angle into [-pi, pi).
-double normalizeAngle(double a);
-
 // True if a circle of `radius` at `centre` overlaps a wall cell
 // (outside the map counts as wall).
 bool collides(const Grid& grid, Point centre, double radius);
@@ -50,7 +48,7 @@ public:
     const DiffDriveConfig& config() const { return config_; }
     double leftSpeed() const { return left_; }
     double rightSpeed() const { return right_; }
-    Twist velocity() const;            // actual v and omega right now
+    Twist velocity() const;                                 // actual v and omega right now
     double distanceTravelled() const { return distance_; }  // odometer, m
 
 private:
@@ -58,7 +56,7 @@ private:
     Pose pose_;
     double targetLeft_ = 0;
     double targetRight_ = 0;
-    double left_ = 0;   // current wheel speeds, m/s
+    double left_ = 0;  // current wheel speeds, m/s
     double right_ = 0;
     double distance_ = 0;
 };

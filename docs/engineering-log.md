@@ -69,17 +69,24 @@ a corridor's centre line next to a wall corner: every arc towards the path was (
 corner, turns, and continues on the centre line.
 **Lesson.** The safety check fixed the *symptom* (bumps); the *cause* was the controller's geometry.
 
-### 9. A crash that was not in the robot code
+### 9. A crash that moved around — and a wrong first explanation
 
-**Symptom.** A debug program crashed with optimisation on, but not with bounds checks on, nor under
-the debugger, nor with the undefined-behaviour checker. That pattern suggests undefined behaviour,
-so the first suspect was a division by zero producing NaN in the controller.
-**Investigation.** A NaN check found nothing. The only other difference between crashing and
-non-crashing versions was a debug `printf("%zu")` line in the throwaway program itself; with it
-removed, the crash disappeared. The robot code was never involved.
-**Lesson.** Check a suspicion before acting on it; isolate the difference between a working and a
-failing run.
-
+**Symptom.** Programs built with optimisation sometimes crashed with a segmentation fault, but not
+with bounds checks on, not under the debugger, not with the undefined-behaviour checker. That
+pattern usually means undefined behaviour, so the first suspect was a division by zero producing
+NaN in the controller.
+**First (wrong) conclusion.** A NaN check found nothing. A crashing debug program had a
+`printf("%zu")` line that a working one did not, so I blamed that — without proving it.
+**What it really was.** Later, after the switch to GoogleTest, the test program crashed in Git
+Bash but passed in PowerShell. Same binary, different shell — so not the
+code. On Windows a program built with GCC loads the C++ runtime from `libstdc++-6.dll`, from the
+first folder on `PATH` that has one. Git Bash puts **Git's own, older** copy first. Experiments
+settled it: the old "`%zu`" program runs fine with the right DLL, and every build runs in every
+shell once the runtime is linked statically.
+**Fix.** On MinGW the runtime is linked into the executable (`-static`), so it no longer depends on
+`PATH` — and the `.exe` runs on computers without a compiler installed.
+**Lesson.** "It crashes in one environment and not another" — compare the environments before the
+code. And a fix that was never verified is a guess: the `%zu` explanation was wrong.
 ### 10. Tuning that only looked like it worked (navigation)
 
 **Symptom.** A sweep over controller settings (lookahead, turn-on-the-spot angle, curve slowdown)

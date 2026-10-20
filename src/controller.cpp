@@ -8,7 +8,9 @@ namespace {
 
 constexpr double kSampleSpacing = 0.05;  // m between resampled path points
 
-double dist(Point a, Point b) { return std::hypot(a.x - b.x, a.y - b.y); }
+double dist(Point a, Point b) {
+    return std::hypot(a.x - b.x, a.y - b.y);
+}
 
 }  // namespace
 
@@ -33,9 +35,8 @@ void PurePursuit::setPath(const std::vector<Point>& path) {
         const Point b = path[i];
         if (i >= 2) {
             const Point before = path[i - 2];
-            const double turn = std::remainder(std::atan2(b.y - a.y, b.x - a.x) -
-                                                   std::atan2(a.y - before.y, a.x - before.x),
-                                               2 * 3.14159265358979323846);
+            const double turn =
+                std::remainder(std::atan2(b.y - a.y, b.x - a.x) - std::atan2(a.y - before.y, a.x - before.x), 2 * kPi);
             if (std::abs(turn) > 0.1) corners_.push_back(path_.size() - 1);  // index of point a
         }
         const int pieces = std::max(1, static_cast<int>(std::ceil(dist(a, b) / kSampleSpacing)));

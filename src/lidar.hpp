@@ -9,23 +9,23 @@
 // One full turn of the lidar: a distance per beam angle.
 // The same layout as ROS's sensor_msgs/LaserScan.
 struct LaserScan {
-    double angleMin = 0;        // angle of beam 0, relative to the robot's heading, rad
-    double angleIncrement = 0;  // angle between neighbouring beams, rad
-    double rangeMin = 0;        // readings closer than this are not valid, m
-    double rangeMax = 0;        // readings further than this are not valid, m
-    std::vector<double> ranges; // m; infinity = no return (nothing in range, or a dropout)
+    double angleMin = 0;         // angle of beam 0, relative to the robot's heading, rad
+    double angleIncrement = 0;   // angle between neighbouring beams, rad
+    double rangeMin = 0;         // readings closer than this are not valid, m
+    double rangeMax = 0;         // readings further than this are not valid, m
+    std::vector<double> ranges;  // m; infinity = no return (nothing in range, or a dropout)
 
     double angle(size_t i) const { return angleMin + static_cast<double>(i) * angleIncrement; }
 };
 
 // Roughly the TurtleBot3's LDS-01 lidar.
 struct LidarConfig {
-    int beams = 180;             // one every 2 degrees, all the way round
-    double rangeMin = 0.12;      // m
-    double rangeMax = 3.5;       // m
-    double noiseStdDev = 0.015;  // m, Gaussian noise on every reading
-    double dropoutChance = 0.01; // chance that a beam returns nothing at all
-    double rateHz = 5.0;         // scans per second
+    int beams = 180;              // one every 2 degrees, all the way round
+    double rangeMin = 0.12;       // m
+    double rangeMax = 3.5;        // m
+    double noiseStdDev = 0.015;   // m, Gaussian noise on every reading
+    double dropoutChance = 0.01;  // chance that a beam returns nothing at all
+    double rateHz = 5.0;          // scans per second
 };
 
 // Distance from `origin` along `angle` (map frame) to the first wall, using
