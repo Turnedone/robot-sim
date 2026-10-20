@@ -13,6 +13,7 @@
 #include "odometry.hpp"
 #include "particle_filter.hpp"
 #include "robot.hpp"
+#include "slam.hpp"
 
 namespace {
 
@@ -252,7 +253,8 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
     // The viewer works on its own copies, so R can always go back to the original.
     Grid grid = scenario.grid;
     const bool localize = options.localize;
-    const DiffDriveConfig config = localize ? slippyWheels() : DiffDriveConfig{};
+    const bool slamMode = options.slam && !localize;
+    const DiffDriveConfig config = localize || slamMode ? slippyWheels() : DiffDriveConfig{};
     DiffDriveRobot robot(config, startPose(scenario));
     std::vector<Point> trail{{robot.pose().x, robot.pose().y}};
     double simTime = 0;
@@ -282,15 +284,20 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
             filter.initAround(robot.pose(), 0.1, 0.1);
     };
     initFilter();
-    // The pose the robot ACTS on: the truth in mapping mode, its estimate when localizing.
-    const auto believedPose = [&] { return localize ? filter.estimate() : robot.pose(); };
+    // SLAM mode: the map AND the pose come from SLAM (its best particle).
+    const auto newSlam = [&] { return GridSlam(grid.width(), grid.height(), grid.resolution(), startPose(scenario)); };
+    GridSlam slam = newSlam();
+    // The map and the pose the robot ACTS on: the truth in mapping mode, its
+    // estimate when localizing or doing SLAM.
+    const auto believedPose = [&] { return slamMode ? slam.estimate() : localize ? filter.estimate() : robot.pose(); };
+    const auto robotMap = [&]() -> const OccupancyMap& { return slamMode ? slam.map() : map; };
 
     NavigatorConfig navConfig;
     navConfig.robotRadius = config.radius;
     Navigator nav(navConfig);
     if (options.goToGoal) {
         nav.setGoal(scenario.goal);
-        nav.replan(map, believedPose());
+        nav.replan(robotMap(), believedPose());
     }
     std::mt19937 kidnapRng(std::random_device{}());  // a different surprise every time
 
@@ -298,23 +305,28 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
     const int width = std::max(mapWidth, kMinWidth);
     const int height = kHeaderHeight + grid.height() * kCellSize;
 
-    SetConfigFlags(FLAG_MSAA_4X_HINT);  // smoother circles
-    SetTraceLogLevel(LOG_WARNING);      // keep raylib's startup messages out of the terminal
+    const bool takingScreenshot = !options.screenshot.empty();
+    // A screenshot run never shows its window, so it cannot get in anyone's way.
+    unsigned int flags = static_cast<unsigned int>(FLAG_MSAA_4X_HINT);  // smoother circles
+    if (takingScreenshot) flags |= static_cast<unsigned int>(FLAG_WINDOW_HIDDEN);
+    SetConfigFlags(flags);
+    SetTraceLogLevel(LOG_WARNING);  // keep raylib's startup messages out of the terminal
     InitWindow(width, height, "robot-sim");
     SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
         // --- input -------------------------------------------------------
-        const std::optional<Pos> hover = screenToCell(GetMousePosition(), grid);
+        const std::optional<Pos> hover =
+            takingScreenshot ? std::nullopt : screenToCell(GetMousePosition(), grid);  // no stray mouse in images
         // Arrow keys always win (manual driving) and cancel any goal.
         if (anyArrowKeyDown() && nav.status() != NavStatus::Idle) nav.cancel();
         if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             nav.setGoal(*hover);
-            nav.replan(map, believedPose());
+            nav.replan(robotMap(), believedPose());
         }
         if (IsKeyPressed(KEY_G)) {
             nav.setGoal(scenario.goal);
-            nav.replan(map, believedPose());
+            nav.replan(robotMap(), believedPose());
         }
         if (localize && IsKeyPressed(KEY_K)) {
             // Kidnap: move the robot somewhere random without telling it.
@@ -356,6 +368,7 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
             odometry.reset(robot.pose());
             lastOdometry = odometry.pose();
             initFilter();
+            slam = newSlam();
             nav = Navigator(navConfig);
         }
 
@@ -372,7 +385,7 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
             else if (localize && !filter.healthy())
                 robot.setCommand({0.0, 0.8});  // lost: turn on the spot to find itself before driving on
             else
-                robot.setCommand(nav.command(believedPose(), map));
+                robot.setCommand(nav.command(believedPose(), robotMap()));
             if (!robot.step(kPhysicsDt, grid)) bumpTimer = kBumpFlash;
             odometry.update(robot.leftSpeed(), robot.rightSpeed(), kPhysicsDt);
 
@@ -389,7 +402,12 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
                 scanTimer -= scanPeriod;
                 lastScan = lidar.scan(grid, robot.pose());
                 lastScanPose = robot.pose();
-                if (localize) {
+                if (slamMode) {
+                    // SLAM: move every particle by odometry, scan-match it against its own map, add the scan.
+                    slam.predict(lastOdometry, odometry.pose());
+                    lastOdometry = odometry.pose();
+                    slam.update(lastScan);
+                } else if (localize) {
                     // Particle filter: move the particles by the odometry change, then weigh them by the scan.
                     filter.predict(lastOdometry, odometry.pose());
                     lastOdometry = odometry.pose();
@@ -397,7 +415,7 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
                 } else {
                     map.integrate(lastScan, lastScanPose);  // the robot learns from every scan
                 }
-                nav.replan(map, believedPose());  // ...and re-plans on what it now believes
+                nav.replan(robotMap(), believedPose());  // ...and re-plans on what it now believes
             }
         }
         bumpTimer = std::max(0.0, bumpTimer - GetFrameTime());
@@ -434,13 +452,21 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
         int wrong = 0;
         for (int y = 0; y < grid.height(); ++y) {
             for (int x = 0; x < grid.width(); ++x) {
-                const Occupancy o = map.classify({x, y});
+                const Occupancy o = robotMap().classify({x, y});
                 if (o == Occupancy::Unknown) continue;
                 ++explored;
                 if ((o == Occupancy::Occupied) != (grid.at({x, y}) == Cell::Wall)) ++wrong;
             }
         }
-        if (localize) {
+        if (slamMode) {
+            const Pose est = slam.estimate();
+            const Pose odo = odometry.pose();
+            const double err = std::hypot(est.x - p.x, est.y - p.y);
+            DrawText(TextFormat("SLAM error %.2f m  odometry error %.2f m  explored %d%%  wrong cells %d  |  %s", err,
+                                std::hypot(odo.x - p.x, odo.y - p.y), 100 * explored / (grid.width() * grid.height()),
+                                wrong, statusText(nav.status())),
+                     12, 56, 16, err > 0.3 || wrong > 5 ? kWrongColor : kHoverColor);
+        } else if (localize) {
             const Pose est = filter.estimate();
             const Pose odo = odometry.pose();
             const double err = std::hypot(est.x - p.x, est.y - p.y);
@@ -457,7 +483,7 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
         }
 
         switch (view) {
-            case View::RobotMap: drawOccupancy(map, grid); break;
+            case View::RobotMap: drawOccupancy(robotMap(), grid); break;
             case View::TrueMap: drawGrid(grid); break;
             case View::LidarOnly:
                 DrawRectangle(0, kHeaderHeight, width, height - kHeaderHeight, kHiddenMapColor);
@@ -468,13 +494,23 @@ void runViewer(const Scenario& scenario, const ViewerOptions& options) {
         drawScan(lastScan, lastScanPose, grid, showRays);
         drawPlan(nav, grid);
         if (localize) drawParticles(filter, grid);
+        if (slamMode) {
+            for (const Pose& q : slam.poses()) {
+                const Point tip{q.x + 0.08 * std::cos(q.theta), q.y + 0.08 * std::sin(q.theta)};
+                DrawLineV(worldToScreen({q.x, q.y}, grid), worldToScreen(tip, grid), kParticleColor);
+            }
+        }
         drawRobot(robot, grid, bumpTimer > 0);
-        if (localize) {
-            drawGhost(odometry.pose(), config.radius, grid, kOdometryColor);    // dead reckoning: drifts
-            drawGhost(filter.estimate(), config.radius, grid, kEstimateColor);  // particle filter
+        if (localize || slamMode) {
+            drawGhost(odometry.pose(), config.radius, grid, kOdometryColor);  // dead reckoning: drifts
+            drawGhost(believedPose(), config.radius, grid, kEstimateColor);   // particle filter / SLAM
         }
         if (hover) drawHover(*hover);
         EndDrawing();
+        if (takingScreenshot && simTime >= options.screenshotAfter) {
+            TakeScreenshot(options.screenshot.c_str());  // raylib saves it in the working directory
+            break;
+        }
     }
     CloseWindow();
 }

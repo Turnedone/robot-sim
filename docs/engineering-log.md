@@ -178,3 +178,58 @@ there.
 range with the measured one, which also uses the free space along the beam. Too slow for thousands
 of particles, cheap for one estimate. Result over 30 seeds each: kidnap recovery 30/30 (slowest
 9 s), finding itself 30/30 (slowest 23 s), tracking 30/30 (worst 10.5 cm).
+
+---
+
+## SLAM (stage 7)
+
+### 19. The estimate lagged behind while exploring
+
+**Symptom.** First SLAM version: better than odometry, but final pose errors up to 0.65 m and
+about 30 wrong map cells. Tuning particle count, motion noise, sensor sharpness and resampling (16
+combinations) changed nothing, and the worst error was ~1.12 m in almost every setting.
+**Investigation.** A trace showed the error building up only along the direction of travel, with
+the estimate behind the truth.
+**Cause.** Beams pointing ahead end in space the particle's map has never seen, and the fit scored
+them as bad. Sliding the pose backwards moved those end points into the mapped area, near known
+walls, so the matcher systematically pulled every particle back.
+**Fix.** Beams ending in never-observed cells are skipped: they carry no information. Mean final
+error 0.42 m → 0.03 m, wrong cells 30 → 1.6.
+
+### 20. The corridor problem
+
+**Symptom.** Still a worst error of ~0.6 m, in the long open stretch of the warehouse.
+**Cause.** Along a featureless corridor a scan pins down the distance to the side walls and the
+heading, but not how far along you are; every position fits equally well and the matcher drifts.
+Also, the motion noise turned out to be a 22% standard deviation per move (the parameters are
+variances), far more than the real odometry error.
+**Fix.** An odometry prior in the matching score, and motion noise calibrated to the odometry
+(~4.5%). The noise change alone did nothing; together with the prior the worst error went to
+0.07 m.
+
+### 21. Fresh seeds picked the right setting
+
+Two prior strengths looked equally good on the tuning seeds. On 30 fresh seeds one of them failed
+completely once (2.6 m). Without the fresh-seed check the worse one would have been chosen.
+
+### 22. The S-bend again, and a blunt first fix
+
+**Symptom.** Exploring the maze with SLAM, 3 of 5 runs got stuck turning on the spot at the same
+S-bend as in entry 12.
+**Cause.** The rule "keep the own cell's centre unless the robot has passed it" only looked along
+the direction of travel; the robot was 17 cm off the centre line sideways, so the path cut the
+corner. A first fix (also keep the centre when off the line sideways) broke navigation in open
+space, where small sideways offsets are normal.
+**Fix.** Check directly whether driving straight to the next cell would clip a wall (sweep the
+robot's circle along the line); only then go back via the centre.
+
+### 23. A weak false wall blocked the only path for ever
+
+**Symptom.** Then those runs ended with "no path" and a map with exactly one wrong cell.
+**Cause.** Grazing beams down a 1-cell corridor created weak false walls (log-odds 1.3–1.7). The
+robot stopped; SLAM only updated after moving, so the map never changed; and a bug made "standing
+still" never trigger (braking motion was never reset).
+**Fix.** Maps keep taking scans when the robot is really standing still; and when no path exists,
+the planner retries treating weak walls (log-odds below 3.0) as passable at a high cost, like
+Nav2's clear-costmap recovery. Result on 20 fresh seeds per map: 40/40 explorations reached the
+goal with no map, slipping wheels and no bumps; worst pose error 7 cm.

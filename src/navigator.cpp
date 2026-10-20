@@ -45,7 +45,15 @@ void Navigator::replan(const OccupancyMap& map, const Pose& pose) {
     if (!goal_ || status_ == NavStatus::Idle || status_ == NavStatus::Arrived) return;
 
     const Pos start = map.worldToCell({pose.x, pose.y});
-    const std::optional<std::vector<Pos>> cells = planPath(map, start, *goal_, config_.planner);
+    std::optional<std::vector<Pos>> cells = planPath(map, start, *goal_, config_.planner);
+    if (!cells) {
+        // No path through the walls the map believes in: maybe one of them is
+        // false. Retry letting the path cross walls seen only a few times; the
+        // robot then gets a proper look and the map corrects itself.
+        PlannerConfig recovery = config_.planner;
+        recovery.passWeakWalls = true;
+        cells = planPath(map, start, *goal_, recovery);
+    }
     ++replans_;
     if (!cells) {
         // Maybe the map is wrong or not explored enough yet: keep the goal and
@@ -65,7 +73,19 @@ void Navigator::replan(const OccupancyMap& map, const Pose& pose) {
         const Point next = map.cellCenter((*cells)[1]);
         const double len = std::hypot(next.x - here.x, next.y - here.y);
         const double ahead = ((here.x - pose.x) * (next.x - here.x) + (here.y - pose.y) * (next.y - here.y)) / len;
-        if (ahead > -0.02) points.push_back(here);
+        // ...or if going straight from the robot to the next cell would clip a
+        // wall (the robot is off the centre line at a corner): then it first
+        // goes back to the centre.
+        const auto isWall = [&map](Pos c) { return !map.inBounds(c) || map.classify(c) == Occupancy::Occupied; };
+        const double gap = std::hypot(next.x - pose.x, next.y - pose.y);
+        bool straightIsClear = true;
+        const int samples = static_cast<int>(gap / 0.05);
+        for (int k = 1; k <= samples && straightIsClear; ++k) {
+            const double s = k * 0.05;
+            const Point p{pose.x + (next.x - pose.x) * s / gap, pose.y + (next.y - pose.y) * s / gap};
+            straightIsClear = !circleOverlapsWall(p, config_.robotRadius, map.height(), map.resolution(), isWall);
+        }
+        if (ahead > -0.02 || !straightIsClear) points.push_back(here);
     }
     for (size_t i = 1; i < cells->size(); ++i) points.push_back(map.cellCenter((*cells)[i]));
     pursuit_.setPath(points);

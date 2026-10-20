@@ -27,6 +27,10 @@ void printMap(const Grid& grid, Pos robot, Pos goal) {
 //   --localize  the robot has a saved map but slipping wheels, and localizes
 //               itself with a particle filter.
 //   --global    as --localize, but starting with no idea where it is.
+//   --slam      no map and slipping wheels: the robot builds the map and
+//               localizes in it at the same time.
+//   --screenshot FILE SECONDS   save a frame after SECONDS of simulated time,
+//               from a hidden window, and quit.
 int main(int argc, char** argv) {
     std::string mapPath = "maps/warehouse.txt";
     bool textMode = false;
@@ -41,7 +45,12 @@ int main(int argc, char** argv) {
             options.localize = true;
         else if (arg == "--global")
             options.localize = options.globalStart = true;
-        else
+        else if (arg == "--slam")
+            options.slam = true;
+        else if (arg == "--screenshot" && i + 2 < argc) {
+            options.screenshot = argv[++i];
+            options.screenshotAfter = std::stod(argv[++i]);
+        } else
             mapPath = arg;
     }
 

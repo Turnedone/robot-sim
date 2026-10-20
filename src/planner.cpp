@@ -22,7 +22,10 @@ double octile(Pos a, Pos b) {
 
 std::optional<std::vector<Pos>> planPath(const OccupancyMap& map, Pos start, Pos goal, const PlannerConfig& config) {
     if (!map.inBounds(start) || !map.inBounds(goal)) return std::nullopt;
-    const auto blocked = [&](Pos p) { return !map.inBounds(p) || map.classify(p) == Occupancy::Occupied; };
+    const auto blocked = [&](Pos p) {
+        if (!map.inBounds(p) || map.classify(p) != Occupancy::Occupied) return !map.inBounds(p);
+        return !config.passWeakWalls || map.logOdds(p) >= config.strongWall;
+    };
     // Cutting diagonally past a corner is only safe if both corner cells are KNOWN
     // to be free: an unseen corner may well turn out to be a wall.
     const auto safeCorner = [&](Pos p) { return map.inBounds(p) && map.classify(p) == Occupancy::Free; };
@@ -32,6 +35,7 @@ std::optional<std::vector<Pos>> planPath(const OccupancyMap& map, Pos start, Pos
     const auto cellCost = [&](Pos p) {
         double cost = 1.0;
         if (map.classify(p) == Occupancy::Unknown) cost += config.unknownPenalty;
+        if (map.classify(p) == Occupancy::Occupied) cost += config.weakWallPenalty;  // only reachable when passable
         for (int dy = -1; dy <= 1; ++dy)
             for (int dx = -1; dx <= 1; ++dx)
                 if ((dx || dy) && map.inBounds({p.x + dx, p.y + dy}) &&

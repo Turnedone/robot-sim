@@ -22,6 +22,7 @@ through unknown space and is re-planned five times a second as the lidar reveals
 | Mapping | Builds its own map from noisy scans | Occupancy grid, log-odds Bayesian updates, per-scan voting, usable range | [03-mapping](docs/03-mapping.md) |
 | Planning & control | Goes anywhere you click, re-planning as it learns | A\* on the robot's own map, optimistic planning, pure pursuit, arc collision checking | [04-planning-control](docs/04-planning-control.md) |
 | Localization | Knows where it is although its wheels slip; finds itself from nothing; recovers when kidnapped | Odometry drift, particle filter (Monte Carlo localization, as in AMCL), likelihood field, adaptive particle count, ray-cast health check | [05-localization](docs/05-localization.md) |
+| SLAM | Maps a building it has never seen and localizes in it at the same time, with slipping wheels | Rao-Blackwellized particle filter (as in GMapping): per-particle maps, scan matching, odometry prior, corridor problem | [07-slam](docs/07-slam.md) |
 | ROS 2 | The same core as ROS 2 nodes, with launch files and RViz | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose` | [06-ros2](docs/06-ros2.md) |
 
 How it was debugged — the problems the tests found and how each was tracked down — is in the
@@ -42,6 +43,7 @@ How it was debugged — the problems the tests found and how each was tracked do
  │ navigator  Navigator: re-plan on every scan, safety check  │
  │ odometry   dead reckoning from the wheel encoders          │    ┌─────────────────┐
  │ particle_  ParticleFilter: Monte Carlo localization        │ ◄──│ ros2/ ROS 2     │
+ │ slam       GridSlam: mapping + localization together       │    │                 │
  │   filter                                                   │    │ nodes (Jazzy)   │
  └────────────────────────────────────────────────────────────┘    └─────────────────┘
 ```
@@ -64,6 +66,7 @@ cmake --build build
 ./build/robot_sim --text               # print the map in the terminal instead
 ./build/robot_sim --localize --go      # slipping wheels; the robot localizes with a particle filter
 ./build/robot_sim --global --go        # ...starting with no idea where it is (press K to kidnap it)
+./build/robot_sim maps/maze.txt --slam --go   # no map and slipping wheels: SLAM
 ```
 
 On Windows with MinGW add `-G "MinGW Makefiles"` (or `-G Ninja`) to the first command; with Visual Studio no extra options are needed.
@@ -85,7 +88,7 @@ and how many cells it has **wrong** (sure about, but the opposite of reality) �
 
 ## Tests
 
-96 [GoogleTest](https://github.com/google/googletest) tests, a few seconds in a release build:
+108 [GoogleTest](https://github.com/google/googletest) tests, a few seconds in a release build:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -99,6 +102,7 @@ ctest --test-dir build --output-on-failure
 | [`test_planner`](tests/test_planner.cpp) | A\*: gaps, walled-in goals, no corner cutting, preferring known space |
 | [`test_navigation`](tests/test_navigation.cpp) | The **whole robot closing the loop**: on both maps, 10 runs each with different sensor noise, it must reach the goal every time without touching a wall |
 | [`test_localization`](tests/test_localization.cpp) | Odometry exact without slip and drifting with it; the filter tracks the pose while odometry drifts, finds itself with no starting guess, recovers from kidnapping, and navigates both maps on its own estimate (10 seeds each) |
+| [`test_slam`](tests/test_slam.cpp) | Scan matching recovers an offset pose; on both maps SLAM keeps the pose within 15 cm and the map nearly perfect while odometry-based mapping is badly wrong; and the robot explores to the goal with no map, using only its SLAM estimate (5 seeds each) |
 | [`ros2/…/test`](ros2/robot_sim_ros/test) | ROS 2: message conversions, and the simulator, localizer and navigator nodes driving the robot to a goal over real topics and TF (runs in CI in the `ros:jazzy` container) |
 
 ## Development
@@ -130,7 +134,7 @@ See [maps/](maps).
 
 ## Known limitations and next steps
 
-- **SLAM.** Mapping assumes a known pose and localization assumes a known map; doing both at once is SLAM.
+- **Bigger worlds.** SLAM assumes the map size is known and copies a full map per particle; large areas need growing maps and pose-graph SLAM (Cartographer, slam_toolbox).
 - **Path smoothing.** A\* paths on a grid have many small corners; the controller stops and turns at each one, which is safe in narrow corridors but slow in open space. Line-of-sight smoothing would fix this.
 - **Gazebo / Nav2.** The ROS 2 nodes use standard topics, so they could be swapped for or compared with Gazebo and Nav2.
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "grid.hpp"
 
 struct ViewerOptions {
@@ -8,6 +10,12 @@ struct ViewerOptions {
     // must work out where it is with a particle filter (no mapping).
     bool localize = false;
     bool globalStart = false;  // ...starting with no idea where it is
+    // SLAM mode: no map AND slipping wheels; the robot maps and localizes at once.
+    bool slam = false;
+    // Save one frame after this many simulated seconds to `screenshot`, from a
+    // hidden window, then quit (for documentation images).
+    std::string screenshot;
+    double screenshotAfter = 0;
 };
 
 // Opens a window and runs the interactive viewer until it is closed:

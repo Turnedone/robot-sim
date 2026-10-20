@@ -193,3 +193,36 @@ the odometry pose.
 So a node that subscribes later (RViz, the navigator) still receives the last map, like a latched
 topic in ROS 1.
 </details>
+
+## SLAM
+
+<details><summary>30. Why can't you just map with odometry poses, or localize on a map built that way?</summary>
+
+Odometry drifts, so the map gets smeared (walls doubled and bent); localizing on a smeared map gives
+wrong poses. Each needs the other: that chicken-and-egg problem is SLAM. [07-slam](07-slam.md)
+</details>
+
+<details><summary>31. What does each particle hold in a Rao-Blackwellized particle filter, and why?</summary>
+
+A pose (path) and its own map. Given a path the map can be computed exactly, so only the path has
+to be sampled; resampling then copies good histories, maps included.
+</details>
+
+<details><summary>32. What is the corridor problem and how did you handle it?</summary>
+
+In a long featureless corridor a scan fixes the side distance and heading but not the position
+along the corridor, so scan matching can slide freely. An odometry prior in the matching score
+lets odometry decide where the scan has no information.
+</details>
+
+<details><summary>33. Why skip beams that end in never-observed cells when scan matching?</summary>
+
+They carry no information; scoring them as bad fits pulled every match back towards the mapped
+area, so the estimate lagged behind while exploring. [engineering log 19](engineering-log.md)
+</details>
+
+<details><summary>34. A false wall blocks the only path. What does a robust navigation stack do?</summary>
+
+Recover: re-plan allowing weakly-supported obstacles (Nav2's clear-costmap), go and look closer,
+and keep updating the map even while standing still.
+</details>
