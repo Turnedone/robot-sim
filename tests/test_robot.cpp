@@ -75,6 +75,18 @@ int main() {
         check(near(r.distanceTravelled(), 0.3 * 12.5), "circle: odometer equals speed x time");
     }
     {
+        // A full lap closes even with naive "straight then turn" steps, so it cannot tell
+        // the methods apart. A quarter lap can: the exact arc lands precisely on (R, R)
+        // from the start; the naive method is about v * dt = 6 mm off.
+        const double omega = 2 * pi / 12.8;  // quarter lap = 3.2 s = 160 steps
+        const double radius = 0.3 / omega;
+        DiffDriveRobot r(instantWheels(), {10, 10, 0});
+        r.setCommand({0.3, omega});
+        run(r, world, 3.2);
+        check(near(r.pose().x, 10 + radius) && near(r.pose().y, 10 + radius) && near(r.pose().theta, pi / 2),
+              "arc: a quarter circle lands exactly on the true arc (exact integration)");
+    }
+    {
         DiffDriveRobot r(instantWheels(), {10, 10, 0});
         r.setCommand({1.2, 2.0});  // too fast: wheels would need 0.9 and 1.5 m/s
         r.step(0.02, world);
