@@ -16,23 +16,37 @@
 
 namespace robot_sim_ros {
 
-// Monte Carlo localization against a saved map, in the role of ROS's AMCL
-// (and of map_server: it loads the map file and publishes /map).
-//   subscribes  /scan, /odom, /initialpose (RViz "2D Pose Estimate")
-//   publishes   /map (latched), /particlecloud, /amcl_pose, TF map -> odom
-// Parameters: map_file (string), global (bool: start with no idea where the
-// robot is), particles (int).
+// Monte Carlo localization against a saved map, in the role of ROS's AMCL.
+//   subscribes  /scan, /odom, /initialpose (RViz "2D Pose Estimate"),
+//               /map (when map_file is empty: from a map_server)
+//   publishes   /particlecloud, /amcl_pose, TF map -> odom,
+//               and /map (latched) when it loaded map_file itself
+// Parameters:
+//   map_file           a robot-sim map file; empty = use the /map topic
+//   global             start with no idea where the robot is
+//   initial_x/_y/_yaw  start pose in the map frame (map_file: its start cell)
+//   particles          particle count when confident
+//   sensor_x/_y/_yaw   where the lidar sits on the robot (base_link frame)
+//
+// ROS maps can have their origin anywhere (Nav2's TurtleBot3 map: -10, -10);
+// the core's map starts at 0, 0. Poses are shifted by the map origin on the
+// way in and out.
 class LocalizerNode : public rclcpp::Node {
 public:
     explicit LocalizerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-    Pose estimate() const { return filter_.estimate(); }
+    // The estimate in the ROS map frame.
+    Pose estimate() const;
 
 private:
+    void useMap(const OccupancyMap& map, Point origin, const Pose& startInMapFrame, bool global);
     void onScan(const sensor_msgs::msg::LaserScan& msg);
     void publishMapToOdom();
+    Pose toCore(const Pose& p) const { return {p.x - origin_.x, p.y - origin_.y, p.theta}; }
+    Pose toRos(const Pose& p) const { return {p.x + origin_.x, p.y + origin_.y, p.theta}; }
 
     std::optional<OccupancyMap> map_;
+    Point origin_{};
     ParticleFilter filter_;
     std::optional<Pose> latestOdom_;
     std::optional<Pose> odomAtLastUpdate_;
@@ -41,6 +55,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scanSub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initialPoseSub_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr mapSub_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr mapPub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particlesPub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr posePub_;

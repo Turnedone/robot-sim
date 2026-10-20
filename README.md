@@ -23,7 +23,7 @@ through unknown space and is re-planned five times a second as the lidar reveals
 | Planning & control | Goes anywhere you click, re-planning as it learns | A\* on the robot's own map, optimistic planning, pure pursuit, arc collision checking | [04-planning-control](docs/04-planning-control.md) |
 | Localization | Knows where it is although its wheels slip; finds itself from nothing; recovers when kidnapped | Odometry drift, particle filter (Monte Carlo localization, as in AMCL), likelihood field, adaptive particle count, ray-cast health check | [05-localization](docs/05-localization.md) |
 | SLAM | Maps a building it has never seen and localizes in it at the same time, with slipping wheels | Rao-Blackwellized particle filter (as in GMapping): per-particle maps, scan matching, odometry prior, corridor problem | [07-slam](docs/07-slam.md) |
-| ROS 2 | The same core as ROS 2 nodes, with launch files and RViz | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose` | [06-ros2](docs/06-ros2.md) |
+| ROS 2 + Gazebo | The same core as ROS 2 nodes; **our localizer and navigator drive a TurtleBot3 in Gazebo** in place of AMCL and Nav2 (under 5 cm localization error) | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose`; inflation and path smoothing for 5 cm maps; WSL2 setup | [06-ros2](docs/06-ros2.md) |
 
 How it was debugged — the problems the tests found and how each was tracked down — is in the
 [engineering log](docs/engineering-log.md). Questions to check your understanding are in the

@@ -18,6 +18,12 @@ bool isWallOrOutside(const OccupancyMap& map, Pos cell) {
     return !map.inBounds(cell) || map.classify(cell) == Occupancy::Occupied;
 }
 
+// The lidar's pose in the map, from the robot's pose and where it is mounted.
+Pose sensorPose(const Pose& robot, const Pose& offset) {
+    const double c = std::cos(robot.theta), s = std::sin(robot.theta);
+    return {robot.x + c * offset.x - s * offset.y, robot.y + s * offset.x + c * offset.y, robot.theta + offset.theta};
+}
+
 }  // namespace
 
 // --- Distance field ----------------------------------------------------------
@@ -132,7 +138,8 @@ void ParticleFilter::predict(const Pose& before, const Pose& after) {
 
 // --- 2. Correct --------------------------------------------------------------
 
-double ParticleFilter::scanLogLikelihood(const LaserScan& scan, const OccupancyMap& map, const Pose& pose) const {
+double ParticleFilter::scanLogLikelihood(const LaserScan& scan, const OccupancyMap& map, const Pose& robot) const {
+    const Pose pose = sensorPose(robot, config_.sensorOffset);
     // Likelihood field: a beam "fits" if its end point lies close to a wall.
     // It does not trace the beam, which makes it fast and smooth.
     const DistanceField& distances = field(map);
@@ -150,7 +157,8 @@ double ParticleFilter::scanLogLikelihood(const LaserScan& scan, const OccupancyM
     return logSum;
 }
 
-double ParticleFilter::scanMatchAt(const LaserScan& scan, const OccupancyMap& map, const Pose& pose) const {
+double ParticleFilter::scanMatchAt(const LaserScan& scan, const OccupancyMap& map, const Pose& robot) const {
+    const Pose pose = sensorPose(robot, config_.sensorOffset);
     // Cast each beam on the map from `pose` and compare the distance it SHOULD
     // measure with what it did measure. Unlike the likelihood field this also
     // uses the free space along the beam: from a wrong pose, a beam whose end

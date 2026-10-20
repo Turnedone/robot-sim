@@ -32,6 +32,7 @@ private:
 
     Navigator navigator_;
     std::optional<OccupancyMap> map_;
+    Point origin_{};  // the ROS map's origin; the core's map starts at 0, 0
     std::shared_ptr<tf2_ros::Buffer> tfBuffer_;
     std::shared_ptr<tf2_ros::TransformListener> tfListener_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalSub_;

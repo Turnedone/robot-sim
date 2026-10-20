@@ -209,6 +209,23 @@ TEST(ParticleFilter, ScanFitsBestAtTheTruePose) {
     EXPECT_GT(atTruth, f.scanLogLikelihood(scan, map, {truth.x, truth.y, truth.theta + 0.15}));
 }
 
+TEST(ParticleFilter, UsesTheLidarMountingOffset) {
+    // The lidar sits 0.3 m ahead of the robot's centre. A filter that knows this
+    // must prefer the true robot pose; one that ignores it is 0.3 m off.
+    const Scenario s = load("warehouse");
+    const OccupancyMap map = knownMap(s.grid);
+    const Pose robot{3.25, 3.75, 0.0};
+    const Pose lidarPose{robot.x + 0.3, robot.y, robot.theta};
+    Lidar lidar(LidarConfig{}, 6);
+    const LaserScan scan = lidar.scan(s.grid, lidarPose);
+    MclConfig c;
+    c.sensorOffset = {0.3, 0.0, 0.0};
+    const ParticleFilter withOffset(c);
+    const ParticleFilter withoutOffset;
+    EXPECT_GT(withOffset.scanLogLikelihood(scan, map, robot), withOffset.scanLogLikelihood(scan, map, lidarPose));
+    EXPECT_GT(withoutOffset.scanLogLikelihood(scan, map, lidarPose), withoutOffset.scanLogLikelihood(scan, map, robot));
+}
+
 class Localization : public ::testing::TestWithParam<unsigned> {};
 
 TEST_P(Localization, TracksThePoseWhileOdometryDrifts) {

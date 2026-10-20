@@ -233,3 +233,26 @@ still" never trigger (braking motion was never reset).
 the planner retries treating weak walls (log-odds below 3.0) as passable at a high cost, like
 Nav2's clear-costmap recovery. Result on 20 fresh seeds per map: 40/40 explorations reached the
 goal with no map, slipping wheels and no bumps; worst pose error 7 cm.
+
+---
+
+## Gazebo (TurtleBot3)
+
+### 24. Inflation that let paths graze walls
+
+**Symptom.** A new test (every path cell must keep the robot's radius from walls) found cells
+21.5 cm from a wall, for a 22 cm limit.
+**Cause.** The distance map added up grid steps (straight and diagonal), which overestimates
+distances at most angles.
+**Fix.** The flood fill carries along which wall cell is nearest and measures the true straight-line
+distance to its edge.
+
+### 25. Gazebo did not load the world, the run "worked" anyway
+
+**Symptom.** Our nodes started, received the map and accepted a goal, but nothing moved.
+**Cause.** Buried in the output: Gazebo could not find `model://turtlebot3_world`, so there was no
+world and no robot. Nav2's demo works because its environment sets the model path; ours did not.
+**Fix.** The launch file sets `GZ_SIM_RESOURCE_PATH`. Also: the world file is generated before
+Gazebo starts, not at the same time (a race).
+**Lesson.** "No errors from my nodes" is not "working"; check the whole system, here by asking
+Gazebo where the robot really is.

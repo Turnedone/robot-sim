@@ -30,6 +30,9 @@ struct MclConfig {
     double randomWeight = 0.05;     // ...and by something unexpected
     double fieldResolution = 0.05;  // m: cell size of the precomputed distance field
     double fieldMaxDistance = 1.0;  // m: distances beyond this are stored as this
+    // Where the lidar sits on the robot, in the robot's frame (on a TurtleBot3
+    // it is a few cm behind the centre). Beams start from there.
+    Pose sensorOffset{};
 
     // Only update after the robot has moved or turned this much (AMCL:
     // update_min_d, update_min_a). A robot standing still sees the same scan
@@ -89,10 +92,10 @@ public:
 
     // How well a scan fits the map seen from `pose`: sum of log-likelihoods of
     // the used beams. Higher = better fit. Exposed for tests.
-    double scanLogLikelihood(const LaserScan& scan, const OccupancyMap& map, const Pose& pose) const;
+    double scanLogLikelihood(const LaserScan& scan, const OccupancyMap& map, const Pose& robot) const;
     // Share of a scan's beams (with a return) whose range is within
     // matchDistance of what the map predicts from `pose`. Exposed for tests.
-    double scanMatchAt(const LaserScan& scan, const OccupancyMap& map, const Pose& pose) const;
+    double scanMatchAt(const LaserScan& scan, const OccupancyMap& map, const Pose& robot) const;
 
 private:
     // Distance from any point to the nearest wall, precomputed on a fine grid
