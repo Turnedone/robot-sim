@@ -1,10 +1,25 @@
 #include "grid.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <stdexcept>
 
-Grid::Grid(int width, int height)
-    : width_(width), height_(height), cells_(static_cast<size_t>(width * height), Cell::Free) {}
+Grid::Grid(int width, int height, double resolution)
+    : width_(width),
+      height_(height),
+      resolution_(resolution),
+      cells_(static_cast<size_t>(width * height), Cell::Free) {}
+
+Point Grid::cellCenter(Pos p) const {
+    // Row 0 is the TOP of the map, but y grows UP, hence the flip.
+    return {(p.x + 0.5) * resolution_, (height_ - p.y - 0.5) * resolution_};
+}
+
+Pos Grid::worldToCell(Point w) const {
+    const int col = static_cast<int>(std::floor(w.x / resolution_));
+    const int rowFromBottom = static_cast<int>(std::floor(w.y / resolution_));
+    return {col, height_ - 1 - rowFromBottom};
+}
 
 bool Grid::inBounds(Pos p) const {
     return p.x >= 0 && p.y >= 0 && p.x < width_ && p.y < height_;

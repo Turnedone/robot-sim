@@ -1,30 +1,54 @@
 #include "viewer.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <optional>
+#include <vector>
 
 #include <raylib.h>
 
+#include "robot.hpp"
+
 namespace {
 
-constexpr int kCellSize = 32;     // pixels per map cell
-constexpr int kHeaderHeight = 40; // strip at the top for text
-constexpr int kMinWidth = 760;    // so the header text always fits
+constexpr int kCellSize = 32;      // pixels per map cell
+constexpr int kHeaderHeight = 56;  // strip at the top for text (two lines)
+constexpr int kMinWidth = 760;     // so the header text always fits
+
+constexpr double kPhysicsDt = 0.02;     // simulate at 50 Hz, a typical robot control rate
+constexpr double kTeleopLinear = 0.5;   // m/s while up/down is held
+constexpr double kTeleopAngular = 2.0;  // rad/s while left/right is held
+constexpr double kTrailSpacing = 0.05;  // m between trail points
+constexpr size_t kTrailMax = 4000;
+constexpr double kBumpFlash = 0.3;      // s the robot shows red after a bump
 
 const Color kFreeColor{235, 235, 230, 255};
 const Color kWallColor{60, 63, 70, 255};
 const Color kGridLineColor{210, 210, 205, 255};
 const Color kHoverColor{255, 200, 60, 255};
 const Color kRobotColor{40, 110, 220, 255};
+const Color kBumpColor{220, 60, 50, 255};
+const Color kWheelColor{25, 25, 30, 255};
+const Color kTrailColor{40, 110, 220, 110};
 const Color kGoalColor{40, 170, 90, 255};
 const Color kHeaderColor{30, 32, 36, 255};
 const Color kHeaderDim{150, 150, 150, 255};
+
+float pixelsPerMeter(const Grid& grid) { return static_cast<float>(kCellSize / grid.resolution()); }
 
 // Top-left pixel of a map cell on screen.
 Vector2 cellToScreen(Pos p) {
     return {static_cast<float>(p.x * kCellSize), static_cast<float>(kHeaderHeight + p.y * kCellSize)};
 }
 
-// The reverse: which cell a pixel is in, or nothing if it is outside the map.
+// Map frame (meters, y up) -> screen pixels (y down).
+Vector2 worldToScreen(Point w, const Grid& grid) {
+    const float ppm = pixelsPerMeter(grid);
+    const double mapHeight = grid.height() * grid.resolution();
+    return {static_cast<float>(w.x * ppm), static_cast<float>(kHeaderHeight + (mapHeight - w.y) * ppm)};
+}
+
+// Which cell a pixel is in, or nothing if it is outside the map.
 std::optional<Pos> screenToCell(Vector2 pixel, const Grid& grid) {
     if (pixel.y < kHeaderHeight) return std::nullopt;
     const Pos p{static_cast<int>(pixel.x) / kCellSize,
@@ -33,13 +57,19 @@ std::optional<Pos> screenToCell(Vector2 pixel, const Grid& grid) {
     return p;
 }
 
-// Arrow key pressed this frame as a one-cell step, or {0, 0} if none.
-Pos readArrowKeys() {
-    if (IsKeyPressed(KEY_RIGHT)) return {1, 0};
-    if (IsKeyPressed(KEY_LEFT)) return {-1, 0};
-    if (IsKeyPressed(KEY_DOWN)) return {0, 1};
-    if (IsKeyPressed(KEY_UP)) return {0, -1};
-    return {0, 0};
+// Held arrow keys -> a velocity command, like ROS's teleop_twist_keyboard.
+Twist readTeleop() {
+    Twist cmd;
+    if (IsKeyDown(KEY_UP)) cmd.linear += kTeleopLinear;
+    if (IsKeyDown(KEY_DOWN)) cmd.linear -= kTeleopLinear;
+    if (IsKeyDown(KEY_LEFT)) cmd.angular += kTeleopAngular;   // counter-clockwise
+    if (IsKeyDown(KEY_RIGHT)) cmd.angular -= kTeleopAngular;
+    return cmd;
+}
+
+Pose startPose(const Scenario& s) {
+    const Point c = s.grid.cellCenter(s.start);
+    return {c.x, c.y, 0.0};
 }
 
 void drawGrid(const Grid& grid) {
@@ -65,23 +95,51 @@ void drawGoal(Pos goal) {
                   kCellSize - 2 * pad, kGoalColor);
 }
 
-void drawRobot(Pos robot) {
-    const Vector2 s = cellToScreen(robot);
-    const Vector2 centre{s.x + kCellSize / 2.0f, s.y + kCellSize / 2.0f};
-    DrawCircleV(centre, kCellSize * 0.38f, kRobotColor);
+void drawTrail(const std::vector<Point>& trail, const Grid& grid) {
+    for (size_t i = 1; i < trail.size(); ++i)
+        DrawLineEx(worldToScreen(trail[i - 1], grid), worldToScreen(trail[i], grid), 2.0f, kTrailColor);
+}
+
+void drawRobot(const DiffDriveRobot& robot, const Grid& grid, bool bumped) {
+    const Pose& p = robot.pose();
+    const DiffDriveConfig& cfg = robot.config();
+    const float ppm = pixelsPerMeter(grid);
+    const Vector2 centre = worldToScreen({p.x, p.y}, grid);
+
+    DrawCircleV(centre, static_cast<float>(cfg.radius * ppm), bumped ? kBumpColor : kRobotColor);
+
+    // The two wheels sit half a wheel base to the left and right of the centre.
+    const float wheelLength = static_cast<float>(0.12 * ppm);
+    const float wheelWidth = static_cast<float>(0.045 * ppm);
+    const float rotationDeg = static_cast<float>(-p.theta * RAD2DEG);  // screen y is flipped
+    for (int side : {-1, 1}) {
+        const double offset = side * cfg.wheelBase / 2;
+        const Point wheel{p.x - offset * std::sin(p.theta), p.y + offset * std::cos(p.theta)};
+        const Vector2 w = worldToScreen(wheel, grid);
+        DrawRectanglePro({w.x, w.y, wheelLength, wheelWidth}, {wheelLength / 2, wheelWidth / 2}, rotationDeg,
+                         kWheelColor);
+    }
+
+    // Heading: a line from the centre to the front edge.
+    const Point nose{p.x + cfg.radius * std::cos(p.theta), p.y + cfg.radius * std::sin(p.theta)};
+    DrawLineEx(centre, worldToScreen(nose, grid), 3.0f, RAYWHITE);
 }
 
 }  // namespace
 
 void runViewer(const Scenario& scenario) {
-    // The viewer works on its own copy, so R can always go back to the original.
+    // The viewer works on its own copies, so R can always go back to the original.
     Grid grid = scenario.grid;
-    Pos robot = scenario.start;
-    const Pos goal = scenario.goal;
-    int moves = 0;
+    const DiffDriveConfig config;
+    DiffDriveRobot robot(config, startPose(scenario));
+    std::vector<Point> trail{{robot.pose().x, robot.pose().y}};
+    double simTime = 0;
+    double accumulator = 0;
+    double bumpTimer = 0;
+    std::optional<double> goalTime;
 
     const int mapWidth = grid.width() * kCellSize;
-    const int width = mapWidth > kMinWidth ? mapWidth : kMinWidth;
+    const int width = std::max(mapWidth, kMinWidth);
     const int height = kHeaderHeight + grid.height() * kCellSize;
 
     SetConfigFlags(FLAG_MSAA_4X_HINT);  // smoother circles
@@ -92,45 +150,70 @@ void runViewer(const Scenario& scenario) {
     while (!WindowShouldClose()) {
         // --- input -------------------------------------------------------
         const std::optional<Pos> hover = screenToCell(GetMousePosition(), grid);
-        const bool atGoal = robot == goal;
+        robot.setCommand(readTeleop());
 
-        const Pos step = readArrowKeys();
-        if ((step.x != 0 || step.y != 0) && !atGoal) {
-            const Pos next{robot.x + step.x, robot.y + step.y};
-            if (grid.at(next) == Cell::Free) {  // walls (and the map edge) block the robot
-                robot = next;
-                ++moves;
-            }
-        }
-
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && *hover != robot && *hover != goal) {
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && *hover != scenario.goal) {
             grid.set(*hover, grid.at(*hover) == Cell::Wall ? Cell::Free : Cell::Wall);
+            // Never drop a wall on top of the robot.
+            if (collides(grid, {robot.pose().x, robot.pose().y}, config.radius))
+                grid.set(*hover, Cell::Free);
         }
 
         if (IsKeyPressed(KEY_R)) {
             grid = scenario.grid;
-            robot = scenario.start;
-            moves = 0;
+            robot = DiffDriveRobot(config, startPose(scenario));
+            trail.assign(1, {robot.pose().x, robot.pose().y});
+            simTime = 0;
+            accumulator = 0;
+            goalTime.reset();
         }
+
+        // --- simulate ----------------------------------------------------
+        // Physics runs in fixed 20 ms steps whatever the frame rate, so the
+        // robot behaves the same on a fast or a slow PC.
+        accumulator += std::min(GetFrameTime(), 0.25f);
+        while (accumulator >= kPhysicsDt) {
+            accumulator -= kPhysicsDt;
+            simTime += kPhysicsDt;
+            if (!robot.step(kPhysicsDt, grid)) bumpTimer = kBumpFlash;
+
+            const Point here{robot.pose().x, robot.pose().y};
+            if (std::hypot(here.x - trail.back().x, here.y - trail.back().y) > kTrailSpacing) {
+                trail.push_back(here);
+                if (trail.size() > kTrailMax) trail.erase(trail.begin());
+            }
+            if (!goalTime && grid.worldToCell(here) == scenario.goal) goalTime = simTime;
+        }
+        bumpTimer = std::max(0.0, bumpTimer - GetFrameTime());
 
         // --- draw --------------------------------------------------------
         BeginDrawing();
         ClearBackground(kHeaderColor);
 
-        if (robot == goal) {
-            DrawText(TextFormat("Goal reached in %d moves!   R to reset", moves), 12, 11, 18, kGoalColor);
+        if (goalTime) {
+            DrawText(TextFormat("Goal reached in %.1f s, %.1f m driven.   R to reset", *goalTime,
+                                robot.distanceTravelled()),
+                     12, 8, 18, kGoalColor);
         } else {
-            DrawText(TextFormat("moves %d", moves), 12, 11, 18, RAYWHITE);
-            DrawText("arrows: drive   click: wall   R: reset", 120, 11, 18, kHeaderDim);
+            DrawText("arrows: drive   click: wall   R: reset", 12, 8, 18, kHeaderDim);
         }
         if (hover) {
             const char* label = TextFormat("cell (%d, %d)", hover->x, hover->y);
-            DrawText(label, width - MeasureText(label, 18) - 12, 11, 18, kHoverColor);
+            DrawText(label, width - MeasureText(label, 18) - 12, 8, 18, kHoverColor);
         }
 
+        const Pose& p = robot.pose();
+        const Twist v = robot.velocity();
+        DrawText(TextFormat("x %5.2f  y %5.2f m  heading %4.0f deg   v %5.2f m/s  w %5.2f rad/s   "
+                            "wheels L %5.2f  R %5.2f m/s   %.1f m",
+                            p.x, p.y, p.theta * RAD2DEG, v.linear, v.angular, robot.leftSpeed(),
+                            robot.rightSpeed(), robot.distanceTravelled()),
+                 12, 32, 16, RAYWHITE);
+
         drawGrid(grid);
-        drawGoal(goal);
-        drawRobot(robot);
+        drawGoal(scenario.goal);
+        drawTrail(trail, grid);
+        drawRobot(robot, grid, bumpTimer > 0);
         if (hover) drawHover(*hover);
         EndDrawing();
     }

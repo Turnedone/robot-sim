@@ -22,6 +22,7 @@ FetchContent_MakeAvailable(raylib)
 # and later reused unchanged (e.g. inside a ROS2 node).
 add_library(robot_core
     src/grid.cpp
+    src/robot.cpp
 )
 target_include_directories(robot_core PUBLIC src)
 target_compile_options(robot_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -33,3 +34,10 @@ add_executable(robot_sim
 )
 target_link_libraries(robot_sim PRIVATE robot_core raylib)
 target_compile_options(robot_sim PRIVATE -Wall -Wextra -Wpedantic)
+
+# Tests for the robot logic. Run with: ctest --test-dir build --output-on-failure
+enable_testing()
+add_executable(test_robot tests/test_robot.cpp)
+target_link_libraries(test_robot PRIVATE robot_core)
+target_compile_options(test_robot PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME robot_motion COMMAND test_robot)
