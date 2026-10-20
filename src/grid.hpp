@@ -20,6 +20,11 @@ struct Point {
     double y = 0;
 };
 
+// Converting between cells and meters for a map `mapHeight` cells tall with
+// square cells of `resolution` meters. Row 0 is the TOP, but y grows UP.
+Point cellCenter(Pos p, int mapHeight, double resolution);
+Pos worldToCell(Point w, int mapHeight, double resolution);
+
 enum class Cell { Free, Wall };
 
 // The real world: which cells are walls. The robot will NOT get to read this
@@ -38,8 +43,8 @@ public:
     void set(Pos p, Cell c);
 
     // Converting between cells and meters.
-    Point cellCenter(Pos p) const;
-    Pos worldToCell(Point w) const;
+    Point cellCenter(Pos p) const { return ::cellCenter(p, height_, resolution_); }
+    Pos worldToCell(Point w) const { return ::worldToCell(w, height_, resolution_); }
 
 private:
     int width_;

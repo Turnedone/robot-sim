@@ -43,6 +43,15 @@ void OccupancyMap::integrate(const LaserScan& scan, const Pose& pose) {
         // range would erase real walls behind the gap, so it does not vote.
         if (!std::isfinite(r)) continue;
 
+        if (r > config_.usableRange) {
+            walkRay(height_, resolution_, origin, angle, config_.usableRange, [&](Pos cell, double) {
+                if (!inBounds(cell)) return false;
+                ++scanMisses_[index(cell)];
+                return true;
+            });
+            continue;
+        }
+
         // The beam passed through every cell before the surface and ended in one.
         // With noise, the true surface is within [r - tol, r + tol]. Surfaces are
         // where the beam enters a new cell, so the wall is most likely the cell
@@ -81,6 +90,13 @@ void OccupancyMap::integrate(const LaserScan& scan, const Pose& pose) {
         const Pos p{static_cast<int>(i) % width_, static_cast<int>(i) / width_};
         update(p, scanHits_[i] >= scanMisses_[i] ? config_.hit : config_.miss);
     }
+}
+
+void OccupancyMap::set(Pos p, Occupancy o) {
+    if (!inBounds(p)) return;
+    const size_t i = index(p);
+    logOdds_[i] = o == Occupancy::Occupied ? config_.maxLogOdds : o == Occupancy::Free ? config_.minLogOdds : 0.0;
+    observed_[i] = o != Occupancy::Unknown;
 }
 
 bool OccupancyMap::observed(Pos p) const { return inBounds(p) && observed_[index(p)]; }

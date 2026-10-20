@@ -25,6 +25,9 @@ add_library(robot_core
     src/robot.cpp
     src/lidar.cpp
     src/occupancy_map.cpp
+    src/planner.cpp
+    src/controller.cpp
+    src/navigator.cpp
 )
 target_include_directories(robot_core PUBLIC src)
 target_compile_options(robot_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -53,3 +56,9 @@ add_executable(test_mapping tests/test_mapping.cpp)
 target_link_libraries(test_mapping PRIVATE robot_core)
 target_compile_options(test_mapping PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME mapping COMMAND test_mapping)
+
+add_executable(test_navigation tests/test_navigation.cpp)
+target_link_libraries(test_navigation PRIVATE robot_core)
+target_compile_options(test_navigation PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(test_navigation PRIVATE ROBOT_SIM_MAPS_DIR="${CMAKE_SOURCE_DIR}/maps")
+add_test(NAME navigation COMMAND test_navigation)

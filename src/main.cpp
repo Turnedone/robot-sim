@@ -21,15 +21,19 @@ void printMap(const Grid& grid, Pos robot, Pos goal) {
     }
 }
 
-// Usage: robot_sim [map file] [--text]
+// Usage: robot_sim [map file] [--text] [--go]
 //   --text prints the map in the terminal instead of opening a window.
+//   --go   the robot sets off for the goal by itself straight away.
 int main(int argc, char** argv) {
     std::string mapPath = "maps/warehouse.txt";
     bool textMode = false;
+    bool go = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--text")
             textMode = true;
+        else if (arg == "--go")
+            go = true;
         else
             mapPath = arg;
     }
@@ -43,7 +47,7 @@ int main(int argc, char** argv) {
             std::cout << '\n';
             printMap(s.grid, s.start, s.goal);
         } else {
-            runViewer(s);
+            runViewer(s, go);
         }
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';

@@ -8,6 +8,7 @@
 #include <raylib.h>
 
 #include "lidar.hpp"
+#include "navigator.hpp"
 #include "occupancy_map.hpp"
 #include "robot.hpp"
 
@@ -39,6 +40,8 @@ const Color kHiddenMapColor{18, 19, 22, 255};
 const Color kUnknownColor{112, 120, 132, 255};  // as in RViz: unknown grey, free white, wall black
 const Color kOccupiedColor{22, 24, 28, 255};
 const Color kWrongColor{230, 40, 40, 255};
+const Color kPathColor{240, 150, 30, 255};
+const Color kTargetColor{240, 150, 30, 255};
 const Color kHeaderColor{30, 32, 36, 255};
 const Color kHeaderDim{150, 150, 150, 255};
 
@@ -63,6 +66,32 @@ std::optional<Pos> screenToCell(Vector2 pixel, const Grid& grid) {
                 (static_cast<int>(pixel.y) - kHeaderHeight) / kCellSize};
     if (!grid.inBounds(p)) return std::nullopt;
     return p;
+}
+
+bool anyArrowKeyDown() {
+    return IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT);
+}
+
+const char* statusText(NavStatus s) {
+    switch (s) {
+        case NavStatus::Idle: return "manual";
+        case NavStatus::Driving: return "driving to goal";
+        case NavStatus::Arrived: return "arrived";
+        case NavStatus::NoPath: return "NO PATH (waiting for the map to change)";
+    }
+    return "";
+}
+
+void drawPlan(const Navigator& nav, const Grid& grid) {
+    const std::vector<Point>& path = nav.path();
+    for (size_t i = 1; i < path.size(); ++i)
+        DrawLineEx(worldToScreen(path[i - 1], grid), worldToScreen(path[i], grid), 3.0f, kPathColor);
+    if (const std::optional<Pos> goal = nav.goal()) {
+        const Vector2 s = cellToScreen(*goal);
+        DrawRectangleLinesEx({s.x + 3, s.y + 3, kCellSize - 6, kCellSize - 6}, 3.0f, kTargetColor);
+    }
+    if (const std::optional<Point> aim = nav.lookaheadPoint())
+        DrawCircleLinesV(worldToScreen(*aim, grid), 6.0f, kTargetColor);
 }
 
 // Held arrow keys -> a velocity command, like ROS's teleop_twist_keyboard.
@@ -189,7 +218,7 @@ void drawRobot(const DiffDriveRobot& robot, const Grid& grid, bool bumped) {
 
 }  // namespace
 
-void runViewer(const Scenario& scenario) {
+void runViewer(const Scenario& scenario, bool goToGoal) {
     // The viewer works on its own copies, so R can always go back to the original.
     Grid grid = scenario.grid;
     const DiffDriveConfig config;
@@ -210,6 +239,11 @@ void runViewer(const Scenario& scenario) {
 
     OccupancyMap map(grid.width(), grid.height(), grid.resolution());
     map.integrate(lastScan, lastScanPose);
+    Navigator nav;
+    if (goToGoal) {
+        nav.setGoal(scenario.goal);
+        nav.replan(map, robot.pose());
+    }
 
     const int mapWidth = grid.width() * kCellSize;
     const int width = std::max(mapWidth, kMinWidth);
@@ -223,9 +257,18 @@ void runViewer(const Scenario& scenario) {
     while (!WindowShouldClose()) {
         // --- input -------------------------------------------------------
         const std::optional<Pos> hover = screenToCell(GetMousePosition(), grid);
-        robot.setCommand(readTeleop());
+        // Arrow keys always win (manual driving) and cancel any goal.
+        if (anyArrowKeyDown() && nav.status() != NavStatus::Idle) nav.cancel();
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            nav.setGoal(*hover);
+            nav.replan(map, robot.pose());
+        }
+        if (IsKeyPressed(KEY_G)) {
+            nav.setGoal(scenario.goal);
+            nav.replan(map, robot.pose());
+        }
 
-        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && *hover != scenario.goal) {
+        if (hover && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && *hover != scenario.goal) {
             grid.set(*hover, grid.at(*hover) == Cell::Wall ? Cell::Free : Cell::Wall);
             // Never drop a wall on top of the robot.
             if (collides(grid, {robot.pose().x, robot.pose().y}, config.radius))
@@ -247,6 +290,7 @@ void runViewer(const Scenario& scenario) {
             lastScanPose = robot.pose();
             map = OccupancyMap(grid.width(), grid.height(), grid.resolution());
             map.integrate(lastScan, lastScanPose);
+            nav = Navigator();
         }
 
         // --- simulate ----------------------------------------------------
@@ -256,6 +300,8 @@ void runViewer(const Scenario& scenario) {
         while (accumulator >= kPhysicsDt) {
             accumulator -= kPhysicsDt;
             simTime += kPhysicsDt;
+            // The controller runs at the physics rate (50 Hz), like a real control loop.
+            robot.setCommand(nav.status() == NavStatus::Idle ? readTeleop() : nav.command(robot.pose(), map));
             if (!robot.step(kPhysicsDt, grid)) bumpTimer = kBumpFlash;
 
             const Point here{robot.pose().x, robot.pose().y};
@@ -272,6 +318,7 @@ void runViewer(const Scenario& scenario) {
                 lastScan = lidar.scan(grid, robot.pose());
                 lastScanPose = robot.pose();
                 map.integrate(lastScan, lastScanPose);  // the robot learns from every scan
+                nav.replan(map, robot.pose());          // ...and re-plans on what it learned
             }
         }
         bumpTimer = std::max(0.0, bumpTimer - GetFrameTime());
@@ -285,7 +332,7 @@ void runViewer(const Scenario& scenario) {
                                 robot.distanceTravelled()),
                      12, 8, 18, kGoalColor);
         } else {
-            DrawText("arrows: drive  click: wall  M: view  L: rays  R: reset", 12, 8, 18, kHeaderDim);
+            DrawText("click: go  G: goal  arrows: drive  right-click: wall  M: view  L: rays  R: reset", 12, 8, 16, kHeaderDim);
         }
         if (hover) {
             const char* label = TextFormat("cell (%d, %d)", hover->x, hover->y);
@@ -312,8 +359,8 @@ void runViewer(const Scenario& scenario) {
                 if ((o == Occupancy::Occupied) != (grid.at({x, y}) == Cell::Wall)) ++wrong;
             }
         }
-        DrawText(TextFormat("view: %s   explored %d%%   wrong cells %d", viewName(view),
-                            100 * explored / (grid.width() * grid.height()), wrong),
+        DrawText(TextFormat("view: %s   explored %d%%   wrong cells %d   |   %s", viewName(view),
+                            100 * explored / (grid.width() * grid.height()), wrong, statusText(nav.status())),
                  12, 56, 16, wrong > 0 ? kWrongColor : kHoverColor);
 
         switch (view) {
@@ -326,6 +373,7 @@ void runViewer(const Scenario& scenario) {
         drawGoal(scenario.goal);
         drawTrail(trail, grid);
         drawScan(lastScan, lastScanPose, grid, showRays);
+        drawPlan(nav, grid);
         drawRobot(robot, grid, bumpTimer > 0);
         if (hover) drawHover(*hover);
         EndDrawing();

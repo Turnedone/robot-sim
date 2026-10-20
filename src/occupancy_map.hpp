@@ -14,12 +14,20 @@ struct OccupancyConfig {
     double miss = -0.41;        // a beam passed through:  p = 0.40
     double minLogOdds = -2.0;   // caps (p = 0.12 .. 0.97), so a belief never gets so
     double maxLogOdds = 3.5;    //   strong that new evidence cannot change it
-    double occupiedAbove = 0.62;  // classify: p > 0.65 -> occupied
-    double freeBelow = -0.62;     //           p < 0.35 -> free
+    // Classifying needs at least TWO agreeing votes either way: one hit (0.85)
+    // or one miss (-0.41) leaves a cell "unknown". A real wall collects dozens
+    // of hits within a second; a one-off glitch must not become a wall.
+    double occupiedAbove = 1.2;   // p > 0.77 -> occupied
+    double freeBelow = -0.62;     // p < 0.35 -> free
     // A reading says "the surface is within this distance of here". Without
     // it, noise would drop half the hits into the free cell just in front of
     // a wall, and walls would grow a cell thicker.
     double surfaceTolerance = 0.05;  // m, about 3x the lidar's noise
+    // Far-away hits are unreliable: few beams reach each far cell, and they
+    // often skim walls at a shallow angle. Beyond this range a beam only marks
+    // the cells it crossed (up to here) as free, and its hit is ignored.
+    // (GMapping calls this maxUrange, "usable range".)
+    double usableRange = 2.5;  // m, the lidar itself reaches 3.5 m
 };
 
 enum class Occupancy { Unknown, Free, Occupied };
@@ -32,6 +40,9 @@ class OccupancyMap {
 public:
     OccupancyMap(int width, int height, double resolution, const OccupancyConfig& config = {});
 
+    // Marks a cell as known for sure (e.g. when loading a saved map, or in tests).
+    void set(Pos p, Occupancy o);
+
     // Adds one scan, taken from `pose`, to the map. Each cell gets at most one
     // vote per scan (hit or miss, by majority of the beams that touched it).
     void integrate(const LaserScan& scan, const Pose& pose);
@@ -39,8 +50,11 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
     double resolution() const { return resolution_; }
+    bool inBounds(Pos p) const { return p.x >= 0 && p.y >= 0 && p.x < width_ && p.y < height_; }
+    Point cellCenter(Pos p) const { return ::cellCenter(p, height_, resolution_); }
+    Pos worldToCell(Point w) const { return ::worldToCell(w, height_, resolution_); }
 
-    bool observed(Pos p) const;        // has any beam ever touched this cell?
+    bool observed(Pos p) const;       // has any beam ever touched this cell?
     double logOdds(Pos p) const;
     double probability(Pos p) const;
     Occupancy classify(Pos p) const;
@@ -48,7 +62,6 @@ public:
 private:
     void update(Pos p, double delta);
     size_t index(Pos p) const { return static_cast<size_t>(p.y * width_ + p.x); }
-    bool inBounds(Pos p) const { return p.x >= 0 && p.y >= 0 && p.x < width_ && p.y < height_; }
 
     int width_;
     int height_;

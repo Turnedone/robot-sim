@@ -67,14 +67,18 @@ int main() {
         scanRepeatedly(map, lidar, world, robot, 1);
         check(map.classify({3, 5}) == Occupancy::Unknown && map.probability({3, 5}) < 0.5,
               "one scan: a cell the beams crossed leans free, but one vote is not enough");
-        check(map.classify({5, 5}) == Occupancy::Occupied, "one scan: the pillar the beams hit is occupied");
+        check(map.classify({5, 5}) == Occupancy::Unknown && map.probability({5, 5}) > 0.5,
+              "one scan: the pillar leans wall, but one vote is not enough either");
     }
     {
         OccupancyMap map(10, 10, 0.5);
         Lidar lidar(perfect());
         scanRepeatedly(map, lidar, world, robot, 3);
         check(map.classify({3, 5}) == Occupancy::Free, "three scans: the gap in front of the pillar is free");
-        check(map.classify({9, 3}) == Occupancy::Occupied, "three scans: the outer wall is occupied");
+        check(map.classify({5, 5}) == Occupancy::Occupied, "three scans: the pillar is occupied");
+        check(map.classify({0, 5}) == Occupancy::Occupied, "three scans: the outer wall next to the robot is occupied");
+        check(map.classify({9, 3}) == Occupancy::Unknown,
+              "a wall 3.3 m away (seen by the lidar, beyond the 2.5 m usable range) is not marked");
         check(!map.observed({9, 2}), "a wall 3.69 m away, beyond the 3.5 m lidar range, stays unknown");
         check(map.classify({7, 5}) == Occupancy::Unknown && !map.observed({7, 5}),
               "the cell hidden behind the pillar stays unknown (no beam can reach it)");

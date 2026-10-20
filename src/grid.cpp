@@ -10,15 +10,15 @@ Grid::Grid(int width, int height, double resolution)
       resolution_(resolution),
       cells_(static_cast<size_t>(width * height), Cell::Free) {}
 
-Point Grid::cellCenter(Pos p) const {
+Point cellCenter(Pos p, int mapHeight, double resolution) {
     // Row 0 is the TOP of the map, but y grows UP, hence the flip.
-    return {(p.x + 0.5) * resolution_, (height_ - p.y - 0.5) * resolution_};
+    return {(p.x + 0.5) * resolution, (mapHeight - p.y - 0.5) * resolution};
 }
 
-Pos Grid::worldToCell(Point w) const {
-    const int col = static_cast<int>(std::floor(w.x / resolution_));
-    const int rowFromBottom = static_cast<int>(std::floor(w.y / resolution_));
-    return {col, height_ - 1 - rowFromBottom};
+Pos worldToCell(Point w, int mapHeight, double resolution) {
+    const int col = static_cast<int>(std::floor(w.x / resolution));
+    const int rowFromBottom = static_cast<int>(std::floor(w.y / resolution));
+    return {col, mapHeight - 1 - rowFromBottom};
 }
 
 bool Grid::inBounds(Pos p) const {
