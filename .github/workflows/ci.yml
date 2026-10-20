@@ -79,9 +79,34 @@ jobs:
       - name: Install the pinned clang-format and clang-tidy
         run: pip install clang-format==23.1.3 clang-tidy==23.1.3
       - name: Check formatting
-        run: clang-format --dry-run --Werror src/*.cpp src/*.hpp tests/*.cpp
+        run: clang-format --dry-run --Werror src/*.cpp src/*.hpp tests/*.cpp $(find ros2 -name "*.cpp" -o -name "*.hpp")
       - name: Configure (for compile_commands.json)
         run: cmake -S . -B build -DROBOT_SIM_BUILD_VIEWER=OFF
       - name: clang-tidy
         # main.cpp and viewer.cpp belong to the viewer, which needs a display library.
         run: clang-tidy -p build --quiet $(ls src/*.cpp tests/*.cpp | grep -v -e viewer.cpp -e main.cpp)
+
+  ros2:
+    name: ROS 2 Jazzy (colcon build + test)
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies with rosdep
+        shell: bash
+        run: |
+          apt-get update
+          rosdep update --rosdistro jazzy
+          rosdep install --from-paths ros2 --ignore-src -y --rosdistro jazzy \
+            --dependency-types build --dependency-types buildtool --dependency-types test
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --base-paths ros2 --event-handlers console_cohesion+
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --base-paths ros2 --event-handlers console_cohesion+ --return-code-on-test-failure
+          colcon test-result --verbose

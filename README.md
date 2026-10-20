@@ -21,7 +21,8 @@ through unknown space and is re-planned five times a second as the lidar reveals
 | Sensing | Sees the world with a simulated 2D lidar | DDA ray casting, sensor noise model, dropouts, range limits, sensor frames | [02-lidar](docs/02-lidar.md) |
 | Mapping | Builds its own map from noisy scans | Occupancy grid, log-odds Bayesian updates, per-scan voting, usable range | [03-mapping](docs/03-mapping.md) |
 | Planning & control | Goes anywhere you click, re-planning as it learns | A\* on the robot's own map, optimistic planning, pure pursuit, arc collision checking | [04-planning-control](docs/04-planning-control.md) |
-| Localization | *next:* knows where it is although its wheels slip | Particle filter (Monte Carlo localization) | — |
+| Localization | Knows where it is although its wheels slip; finds itself from nothing; recovers when kidnapped | Odometry drift, particle filter (Monte Carlo localization, as in AMCL), likelihood field, adaptive particle count, ray-cast health check | [05-localization](docs/05-localization.md) |
+| ROS 2 | The same core as ROS 2 nodes, with launch files and RViz | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose` | [06-ros2](docs/06-ros2.md) |
 
 How it was debugged — the problems the tests found and how each was tracked down — is in the
 [engineering log](docs/engineering-log.md). Questions to check your understanding are in the
@@ -39,12 +40,15 @@ How it was debugged — the problems the tests found and how each was tracked do
  │ planner    A* on the OccupancyMap                          │    │ produces        │
  │ controller PurePursuit path follower                       │    └─────────────────┘
  │ navigator  Navigator: re-plan on every scan, safety check  │
- └────────────────────────────────────────────────────────────┘
+ │ odometry   dead reckoning from the wheel encoders          │    ┌─────────────────┐
+ │ particle_  ParticleFilter: Monte Carlo localization        │ ◄──│ ros2/ ROS 2     │
+ │   filter                                                   │    │ nodes (Jazzy)   │
+ └────────────────────────────────────────────────────────────┘    └─────────────────┘
 ```
 
 The robot logic (`robot_core`) knows nothing about graphics; the viewer only draws what the
-logic produces. That keeps the logic testable on its own, and means it could be wrapped in
-ROS 2 nodes unchanged, with RViz replacing the viewer. The structure mirrors ROS conventions
+logic produces. That keeps the logic testable on its own, and lets the same code run unchanged
+inside ROS 2 nodes ([`ros2/`](ros2/robot_sim_ros)), with RViz replacing the viewer. The structure mirrors ROS conventions
 on purpose: `Twist` commands (like `/cmd_vel`), a `LaserScan` with the same fields as
 `sensor_msgs/LaserScan`, a map frame with y up (REP 103), and a planner/controller split like Nav2.
 
@@ -58,6 +62,8 @@ cmake --build build
 ./build/robot_sim                      # warehouse map
 ./build/robot_sim maps/maze.txt --go   # maze, robot sets off for the goal by itself
 ./build/robot_sim --text               # print the map in the terminal instead
+./build/robot_sim --localize --go      # slipping wheels; the robot localizes with a particle filter
+./build/robot_sim --global --go        # ...starting with no idea where it is (press K to kidnap it)
 ```
 
 On Windows with MinGW add `-G "MinGW Makefiles"` (or `-G Ninja`) to the first command; with Visual Studio no extra options are needed.
@@ -79,7 +85,7 @@ and how many cells it has **wrong** (sure about, but the opposite of reality) �
 
 ## Tests
 
-51 [GoogleTest](https://github.com/google/googletest) tests, about 1 second in a release build:
+96 [GoogleTest](https://github.com/google/googletest) tests, a few seconds in a release build:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -92,6 +98,8 @@ ctest --test-dir build --output-on-failure
 | [`test_mapping`](tests/test_mapping.cpp) | Log-odds maths, one scan is not enough, hidden and out-of-range cells stay unknown, removed obstacles fade, a noisy lidar maps a room with zero wrong cells |
 | [`test_planner`](tests/test_planner.cpp) | A\*: gaps, walled-in goals, no corner cutting, preferring known space |
 | [`test_navigation`](tests/test_navigation.cpp) | The **whole robot closing the loop**: on both maps, 10 runs each with different sensor noise, it must reach the goal every time without touching a wall |
+| [`test_localization`](tests/test_localization.cpp) | Odometry exact without slip and drifting with it; the filter tracks the pose while odometry drifts, finds itself with no starting guess, recovers from kidnapping, and navigates both maps on its own estimate (10 seeds each) |
+| [`ros2/…/test`](ros2/robot_sim_ros/test) | ROS 2: message conversions, and the simulator, localizer and navigator nodes driving the robot to a goal over real topics and TF (runs in CI in the `ros:jazzy` container) |
 
 ## Development
 
@@ -112,7 +120,8 @@ clang-tidy -p build src/*.cpp tests/*.cpp
 
 **Continuous integration** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
 build and test on Linux (GCC and Clang, warnings as errors) and Windows (MSVC), the tests again under
-AddressSanitizer + UBSan, a formatting check, and clang-tidy.
+AddressSanitizer + UBSan, a formatting check, clang-tidy, and the ROS 2 package built and tested in the
+official `ros:jazzy` container.
 
 ## Maps
 
@@ -121,9 +130,9 @@ See [maps/](maps).
 
 ## Known limitations and next steps
 
-- **Localization.** The robot currently knows its true pose. Next: wheel slip, odometry drift and a particle filter.
+- **SLAM.** Mapping assumes a known pose and localization assumes a known map; doing both at once is SLAM.
 - **Path smoothing.** A\* paths on a grid have many small corners; the controller stops and turns at each one, which is safe in narrow corridors but slow in open space. Line-of-sight smoothing would fix this.
-- **ROS 2.** Wrap the core as ROS 2 nodes and run it against Gazebo / Nav2.
+- **Gazebo / Nav2.** The ROS 2 nodes use standard topics, so they could be swapped for or compared with Gazebo and Nav2.
 
 ## License
 

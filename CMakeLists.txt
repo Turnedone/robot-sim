@@ -52,6 +52,7 @@ add_library(robot_core
     src/planner.cpp
     src/controller.cpp
     src/navigator.cpp
+    src/particle_filter.cpp
 )
 target_include_directories(robot_core PUBLIC src)
 target_link_libraries(robot_core PUBLIC robot_sim_options)
@@ -95,6 +96,7 @@ if(ROBOT_SIM_BUILD_TESTS)
         tests/test_mapping.cpp
         tests/test_planner.cpp
         tests/test_navigation.cpp
+        tests/test_localization.cpp
     )
     target_link_libraries(robot_tests PRIVATE robot_core GTest::gtest_main)
     target_compile_definitions(robot_tests PRIVATE ROBOT_SIM_MAPS_DIR="${CMAKE_SOURCE_DIR}/maps")

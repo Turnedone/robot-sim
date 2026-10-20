@@ -1,0 +1,63 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Map
+      Name: Map
+      Enabled: true
+      Color Scheme: map
+      Topic:
+        Value: /map
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/LaserScan
+      Name: Lidar
+      Enabled: true
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 230; 50; 40
+      Topic:
+        Value: /scan
+        Reliability Policy: Best Effort
+    - Class: rviz_default_plugins/PoseArray
+      Name: Particles
+      Enabled: true
+      Color: 150; 70; 200
+      Topic:
+        Value: /particlecloud
+    - Class: rviz_default_plugins/Path
+      Name: Plan
+      Enabled: true
+      Color: 240; 150; 30
+      Topic:
+        Value: /plan
+    - Class: rviz_default_plugins/Pose
+      Name: Ground truth
+      Enabled: true
+      Color: 40; 110; 220
+      Topic:
+        Value: /ground_truth
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+  Global Options:
+    Fixed Frame: map
+    Background Color: 48; 48; 48
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 60
+      X: 7.5
+      Y: 3.25

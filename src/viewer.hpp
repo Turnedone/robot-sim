@@ -2,13 +2,21 @@
 
 #include "grid.hpp"
 
+struct ViewerOptions {
+    bool goToGoal = false;  // start driving to the map's goal straight away (like pressing G)
+    // Localization mode: the robot has a saved map, its wheels slip, and it
+    // must work out where it is with a particle filter (no mapping).
+    bool localize = false;
+    bool globalStart = false;  // ...starting with no idea where it is
+};
+
 // Opens a window and runs the interactive viewer until it is closed:
-//   left click  sends the robot to that cell (A* on its own map + pure pursuit)
+//   left click  sends the robot to that cell (A* + pure pursuit)
 //   G           sends the robot to the map's goal
 //   arrow keys  drive the robot by hand (cancels the goal)
-//   right click toggles a wall on the clicked cell
+//   right click toggles a wall on the clicked cell (mapping mode)
+//   K           kidnaps the robot to a random place (localization mode)
 //   R           resets the robot and the map to how they were loaded
 // This is the only part of the program that knows about graphics: the robot
 // logic never calls into it, it only gets drawn by it.
-// goToGoal: start driving to the map's goal straight away (like pressing G).
-void runViewer(const Scenario& scenario, bool goToGoal = false);
+void runViewer(const Scenario& scenario, const ViewerOptions& options = {});

@@ -25,7 +25,27 @@ bool collides(const Grid& grid, Point centre, double radius) {
                               [&grid](Pos cell) { return grid.at(cell) == Cell::Wall; });
 }
 
-DiffDriveRobot::DiffDriveRobot(const DiffDriveConfig& config, Pose start) : config_(config), pose_(start) {}
+Pose integrateArc(const Pose& pose, double v, double w, double dt) {
+    Pose next = pose;
+    if (std::abs(w) < 1e-9) {
+        // Driving straight.
+        next.x += v * std::cos(pose.theta) * dt;
+        next.y += v * std::sin(pose.theta) * dt;
+    } else {
+        // Driving along an arc of radius v / w. Integrating the arc exactly
+        // (instead of "move straight, then turn") keeps the error at zero
+        // however large dt is.
+        const double newTheta = pose.theta + w * dt;
+        next.x += v / w * (std::sin(newTheta) - std::sin(pose.theta));
+        next.y -= v / w * (std::cos(newTheta) - std::cos(pose.theta));
+        next.theta = newTheta;
+    }
+    next.theta = normalizeAngle(next.theta);
+    return next;
+}
+
+DiffDriveRobot::DiffDriveRobot(const DiffDriveConfig& config, Pose start, unsigned seed)
+    : config_(config), pose_(start), rng_(seed) {}
 
 void DiffDriveRobot::setCommand(Twist cmd) {
     // Inverse kinematics: the wheel speeds that give this v and omega.
@@ -55,26 +75,20 @@ bool DiffDriveRobot::step(double dt, const Grid& grid) {
     left_ = approach(left_, targetLeft_, maxChange);
     right_ = approach(right_, targetRight_, maxChange);
 
-    // Forward kinematics: wheel speeds -> how the body moves.
-    const Twist vel = velocity();
-    const double v = vel.linear;
-    const double w = vel.angular;
-
-    Pose next = pose_;
-    if (std::abs(w) < 1e-9) {
-        // Driving straight.
-        next.x += v * std::cos(pose_.theta) * dt;
-        next.y += v * std::sin(pose_.theta) * dt;
-    } else {
-        // Driving along an arc of radius v / w. Integrating the arc exactly
-        // (instead of "move straight, then turn") keeps the error at zero
-        // however large dt is.
-        const double newTheta = pose_.theta + w * dt;
-        next.x += v / w * (std::sin(newTheta) - std::sin(pose_.theta));
-        next.y -= v / w * (std::cos(newTheta) - std::cos(pose_.theta));
-        next.theta = newTheta;
+    // How the wheels really move the ground: the motor speeds, scaled by the
+    // true wheel sizes, plus random slip.
+    double groundLeft = left_ * config_.leftWheelScale;
+    double groundRight = right_ * config_.rightWheelScale;
+    if (config_.slipNoise > 0) {
+        std::normal_distribution<double> slip(0.0, config_.slipNoise);
+        groundLeft *= 1.0 + slip(rng_);
+        groundRight *= 1.0 + slip(rng_);
     }
-    next.theta = normalizeAngle(next.theta);
+
+    // Forward kinematics: wheel speeds -> how the body moves.
+    const double v = (groundLeft + groundRight) / 2;
+    const double w = (groundRight - groundLeft) / config_.wheelBase;
+    const Pose next = integrateArc(pose_, v, w, dt);
 
     if (collides(grid, {next.x, next.y}, config_.radius)) {
         left_ = 0;

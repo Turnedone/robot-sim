@@ -79,3 +79,7 @@ private:
     };
     std::vector<BeamCell> beamCells_;  // scratch: the cells one beam crosses
 };
+
+// A map the robot already has, with every cell known: like loading a map
+// saved from an earlier mapping run (ROS: map_server). Used for localization.
+OccupancyMap knownMap(const Grid& world);

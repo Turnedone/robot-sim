@@ -21,19 +21,26 @@ void printMap(const Grid& grid, Pos robot, Pos goal) {
     }
 }
 
-// Usage: robot_sim [map file] [--text] [--go]
-//   --text prints the map in the terminal instead of opening a window.
-//   --go   the robot sets off for the goal by itself straight away.
+// Usage: robot_sim [map file] [--text] [--go] [--localize] [--global]
+//   --text      prints the map in the terminal instead of opening a window.
+//   --go        the robot sets off for the goal by itself straight away.
+//   --localize  the robot has a saved map but slipping wheels, and localizes
+//               itself with a particle filter.
+//   --global    as --localize, but starting with no idea where it is.
 int main(int argc, char** argv) {
     std::string mapPath = "maps/warehouse.txt";
     bool textMode = false;
-    bool go = false;
+    ViewerOptions options;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--text")
             textMode = true;
         else if (arg == "--go")
-            go = true;
+            options.goToGoal = true;
+        else if (arg == "--localize")
+            options.localize = true;
+        else if (arg == "--global")
+            options.localize = options.globalStart = true;
         else
             mapPath = arg;
     }
@@ -46,7 +53,7 @@ int main(int argc, char** argv) {
             std::cout << '\n';
             printMap(s.grid, s.start, s.goal);
         } else {
-            runViewer(s, go);
+            runViewer(s, options);
         }
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';

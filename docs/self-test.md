@@ -130,3 +130,66 @@ unsafe it rotates on the spot (always safe for a round robot).
 The closed-loop test runs the whole stack on two maps with 10 different noise seeds each; all must
 arrive with zero bumps. During development 80 runs were used to judge each change.
 </details>
+
+## Localization
+
+<details><summary>21. Why does odometry drift, and why does it get worse over time?</summary>
+
+Wheels slip and are never exactly the assumed size. Each step's small error is added to the pose,
+and heading errors turn into position errors that grow with the distance driven. Nothing corrects
+it. [05-localization](05-localization.md)
+</details>
+
+<details><summary>22. Explain the three steps of a particle filter.</summary>
+
+Predict: move every particle by the odometry change plus its own noise. Correct: weigh each by how
+well the scan fits the map from its pose. Resample: draw a new set in proportion to the weights.
+</details>
+
+<details><summary>23. What is the likelihood field model, and what is its weakness?</summary>
+
+A beam is likely if its end point is close to a wall in the map (precomputed distance field) —
+fast and smooth. It ignores the free space along the beam, so a wrong pose can fit if beam ends
+happen to land near some wall, e.g. in a narrow corridor.
+</details>
+
+<details><summary>24. Why only update the filter after the robot has moved?</summary>
+
+A standing robot sees the same scan repeatedly; re-weighing by it over and over collapses the
+cloud onto one point, and without motion noise nothing spreads it out again (AMCL's
+update_min_d / update_min_a).
+</details>
+
+<details><summary>25. How does your filter notice that it is lost, and why not Augmented MCL?</summary>
+
+It ray-casts the beams from the estimate and checks what share measure the expected range; below
+85% for 10 updates while confident, it searches the whole map again. Augmented MCL compares recent
+and long-term average fit, but the long-term average adapts to a wrong fit, so a filter that
+settled in the wrong place never noticed. [engineering log 14–18](engineering-log.md)
+</details>
+
+<details><summary>26. Why should a robot not navigate while localization is unhealthy?</summary>
+
+It would drive towards a goal based on a wrong belief about where it is. Turning on the spot
+instead gives the filter new views without risk (Nav2's spin recovery).
+</details>
+
+## ROS 2
+
+<details><summary>27. What are the map, odom and base_link frames, and who publishes which transform?</summary>
+
+The driver/odometry publishes odom → base_link (smooth, drifts); localization publishes
+map → odom (the correction, may jump). map → base_link is their composition. [06-ros2](06-ros2.md)
+</details>
+
+<details><summary>28. How do you compute map → odom from the filter's estimate?</summary>
+
+map→odom = (map→base_link) · (odom→base_link)⁻¹, i.e. the estimate composed with the inverse of
+the odometry pose.
+</details>
+
+<details><summary>29. Why does the map topic use "transient local" durability?</summary>
+
+So a node that subscribes later (RViz, the navigator) still receives the last map, like a latched
+topic in ROS 1.
+</details>

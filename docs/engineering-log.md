@@ -114,3 +114,67 @@ ignored (GMapping's `maxUrange`). That left 2 failures in 40 runs.
 
 **Result:** 80 of 80 runs (40 noise seeds × 2 maps) reach the goal with zero bumps; the test suite
 runs 20 of them every time.
+
+---
+
+## Localization (stage 5)
+
+### 13. The particle cloud collapsed while the robot stood still
+
+**Symptom.** In the viewer, with no starting guess, all 3000 particles collapsed onto one wrong
+point within a second; the robot believed it had arrived and never moved.
+**Cause.** Every scan was used to update the filter, including the same scan over and over while
+the robot stood still. Each repeat sharpened the same weights; with no motion there was no motion
+noise to spread the particles out again.
+**Fix.** Only update after the robot has moved or turned a minimum amount, as AMCL does
+(`update_min_d`, `update_min_a`).
+
+### 14. Augmented MCL could not see that it was wrong
+
+**Symptom.** Finding itself from nothing and recovering from a kidnapping each failed in about half
+the runs, whatever the settings (12 combinations of tempering, resampling rule and sensor
+softness were measured).
+**Cause.** Augmented MCL decides it is lost when the recent scan fit drops below the long-term
+average fit. But the long-term average adapts to whatever fit the filter has: a filter that settles
+in the wrong place makes that mediocre fit its baseline and never notices.
+**Fix.** An absolute health check that does not adapt: the share of beams that fit the map from the
+estimate. Tempering and conditional resampling, tried along the way, did not help and were removed.
+
+### 15. "Outside the map" counted as a perfect fit
+
+**Symptom.** Traces of failing runs showed wrong estimates with a scan fit of 97–100%, always near the
+map's edge.
+**Cause.** The distance field returned 0 ("right at a wall") for points outside the map, so from a
+pose near the edge, every beam ending outside the map counted as a perfect match.
+**Fix.** Outside the map gets the maximum distance (nothing is known there), and distances are
+measured to wall *surfaces* (a beam cannot end deep inside a wall). Recovery times dropped from
+up to 158 s to about 20 s.
+
+### 16. Tuned on 10 seeds, failed on the next 10
+
+A setting that worked on seeds 1–10 failed on half of seeds 11–20. Since then every result is
+reported over 20–30 seeds that were not used for tuning.
+
+### 17. The tests drove with the true pose; the viewer did not
+
+**Symptom.** All tests passed, but in the viewer the robot, starting with no idea where it was,
+settled on a wrong place and turned back and forth for ever.
+**Cause.** The global-localization tests drove the robot with its **true** pose, testing the
+filter on its own. In the viewer the robot acts on its **estimate** from the first second, driving
+somewhere based on a wrong belief. The wrong place also fitted 80–93% of the beams, so with a
+"lost" threshold of 50% it never counted as lost.
+**Fix.** The robot does not navigate until localization is healthy; it turns on the spot instead
+(Nav2's spin recovery). The "lost" threshold went to 85% (correctly localized, 95–100% of beams
+fit). The tests now run the realistic case: the robot acts only on its own estimate.
+**Lesson.** Test the system as it is really used, not just its parts.
+
+### 18. A wrong pose in a corridor fitted 93% of the beams
+
+**Symptom.** Still in the viewer: a wrong estimate in a narrow corridor kept a fit of up to 93%.
+**Cause.** The likelihood field only looks at where beams **end**. In a narrow corridor almost any
+end point lies near some wall, even if the beam would have had to pass through another wall to get
+there.
+**Fix.** The health check casts each beam on the map from the estimate and compares the expected
+range with the measured one, which also uses the free space along the beam. Too slow for thousands
+of particles, cheap for one estimate. Result over 30 seeds each: kidnap recovery 30/30 (slowest
+9 s), finding itself 30/30 (slowest 23 s), tracking 30/30 (worst 10.5 cm).

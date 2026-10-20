@@ -9,6 +9,14 @@ double logOddsToProbability(double l) {
     return 1.0 - 1.0 / (1.0 + std::exp(l));
 }
 
+OccupancyMap knownMap(const Grid& world) {
+    OccupancyMap map(world.width(), world.height(), world.resolution());
+    for (int y = 0; y < world.height(); ++y)
+        for (int x = 0; x < world.width(); ++x)
+            map.set({x, y}, world.at({x, y}) == Cell::Wall ? Occupancy::Occupied : Occupancy::Free);
+    return map;
+}
+
 OccupancyMap::OccupancyMap(int width, int height, double resolution, const OccupancyConfig& config)
     : width_(width),
       height_(height),
