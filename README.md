@@ -29,6 +29,12 @@ How it was debugged — the problems the tests found and how each was tracked do
 [engineering log](docs/engineering-log.md). The [devlog](docs/devlog.md) tells the whole story stage by stage. Questions to check your understanding are in the
 [self-test](docs/self-test.md).
 
+**See also: [warehouse-delivery-robot](https://github.com/Turnedone/warehouse-delivery-robot)**,
+the companion project. Where robot-sim writes the algorithms from scratch, it builds a full
+warehouse delivery robot on the industry stack: ROS 2 Jazzy, Nav2 (AMCL, MPPI, Smac, costmap
+filters, docking), Gazebo Harmonic and a C++ mission layer on BehaviorTree.CPP, with end-to-end
+tests in CI. Nav2's AMCL is the same particle filter as [05-localization](docs/05-localization.md).
+
 ## Design
 
 ```
@@ -136,7 +142,7 @@ See [maps/](maps).
 
 - **Bigger worlds.** SLAM assumes the map size is known and copies a full map per particle; large areas need growing maps and pose-graph SLAM (Cartographer, slam_toolbox).
 - **Path smoothing.** A\* paths on a grid have many small corners; the controller stops and turns at each one, which is safe in narrow corridors but slow in open space. Line-of-sight smoothing would fix this.
-- **Gazebo / Nav2.** The ROS 2 nodes use standard topics, so they could be swapped for or compared with Gazebo and Nav2.
+- **Nav2.** The ROS 2 nodes use standard topics, so they could be swapped for or compared with Nav2's AMCL and controllers; the companion [warehouse-delivery-robot](https://github.com/Turnedone/warehouse-delivery-robot) runs the full Nav2 stack.
 
 ## License
 
