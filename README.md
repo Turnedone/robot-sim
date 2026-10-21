@@ -26,7 +26,7 @@ through unknown space and is re-planned five times a second as the lidar reveals
 | ROS 2 + Gazebo | The same core as ROS 2 nodes; **our localizer and navigator drive a TurtleBot3 in Gazebo** in place of AMCL and Nav2 (under 5 cm localization error) | Topics, TF tree, `/cmd_vel`, `/scan`, `/odom`, `/map`, `/goal_pose`; inflation and path smoothing for 5 cm maps; WSL2 setup | [06-ros2](docs/06-ros2.md) |
 
 How it was debugged — the problems the tests found and how each was tracked down — is in the
-[engineering log](docs/engineering-log.md). The [devlog](docs/devlog.md) tells the whole story stage by stage. Questions to check your understanding are in the
+[engineering log](docs/engineering-log.md). Questions to check your understanding are in the
 [self-test](docs/self-test.md).
 
 **See also: [warehouse-delivery-robot](https://github.com/Turnedone/warehouse-delivery-robot)**,
@@ -143,6 +143,11 @@ See [maps/](maps).
 - **Bigger worlds.** SLAM assumes the map size is known and copies a full map per particle; large areas need growing maps and pose-graph SLAM (Cartographer, slam_toolbox).
 - **Path smoothing.** A\* paths on a grid have many small corners; the controller stops and turns at each one, which is safe in narrow corridors but slow in open space. Line-of-sight smoothing would fix this.
 - **Nav2.** The ROS 2 nodes use standard topics, so they could be swapped for or compared with Nav2's AMCL and controllers; the companion [warehouse-delivery-robot](https://github.com/Turnedone/warehouse-delivery-robot) runs the full Nav2 stack.
+
+## How it was built
+
+Designed and built with an AI coding assistant (Claude); every result in the docs comes from runs and
+tests in this repository, and the engineering log records the problems as they were found.
 
 ## License
 

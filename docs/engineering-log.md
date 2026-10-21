@@ -48,7 +48,7 @@ the beam — straight through walls. Ordinary wall cells get enough hits to outv
 cell, rarely hit, did not.
 **Fix.** A missing reading is ambiguous ("nothing there" or "sensor failed"), so it does not vote.
 
-### 6. My test checked a wall the sensor could not see (mapping)
+### 6. A test checked a wall the sensor could not see (mapping)
 
 A test expected a wall 3.69 m away to be mapped; the lidar's range is 3.5 m. The map was right,
 the test was wrong. Kept as a test of the opposite: out-of-range walls stay unknown.
@@ -76,7 +76,7 @@ with bounds checks on, not under the debugger, not with the undefined-behaviour 
 pattern usually means undefined behaviour, so the first suspect was a division by zero producing
 NaN in the controller.
 **First (wrong) conclusion.** A NaN check found nothing. A crashing debug program had a
-`printf("%zu")` line that a working one did not, so I blamed that — without proving it.
+`printf("%zu")` line that a working one did not, so that line was blamed — without proving it.
 **What it really was.** Later, after the switch to GoogleTest, the test program crashed in Git
 Bash but passed in PowerShell. Same binary, different shell — so not the
 code. On Windows a program built with GCC loads the C++ runtime from `libstdc++-6.dll`, from the
@@ -254,5 +254,5 @@ distance to its edge.
 world and no robot. Nav2's demo works because its environment sets the model path; ours did not.
 **Fix.** The launch file sets `GZ_SIM_RESOURCE_PATH`. Also: the world file is generated before
 Gazebo starts, not at the same time (a race).
-**Lesson.** "No errors from my nodes" is not "working"; check the whole system, here by asking
+**Lesson.** "No errors from our nodes" is not "working"; check the whole system, here by asking
 Gazebo where the robot really is.
